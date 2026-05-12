@@ -772,6 +772,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
           deviceFamily: connectedNode.deviceFamily,
           commands: connectedNode.commands,
           cfg: context.getRuntimeConfig(),
+          refreshAfterInflight: true,
         }).catch((err) =>
           context.logGateway.warn(
             `remote bin probe failed after node pairing approval for ${approvedNode.nodeId}: ${formatErrorMessage(

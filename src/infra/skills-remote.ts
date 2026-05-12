@@ -371,11 +371,14 @@ export async function refreshRemoteNodeBins(params: {
   commands?: string[];
   cfg: OpenClawConfig;
   timeoutMs?: number;
+  refreshAfterInflight?: boolean;
 }) {
   const existing = remoteBinProbeInflight.get(params.nodeId);
   if (existing) {
     await existing;
-    return;
+    if (!params.refreshAfterInflight) {
+      return;
+    }
   }
   const run = refreshRemoteNodeBinsUncoalesced(params).finally(() => {
     if (remoteBinProbeInflight.get(params.nodeId) === run) {
