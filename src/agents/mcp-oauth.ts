@@ -8,11 +8,7 @@ import {
 } from "../state/openclaw-state-lease.js";
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
 import type { OpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.types.js";
-import {
-  buildMcpHttpFetch,
-  withoutMcpAuthorizationHeader,
-  withSameOriginMcpHttpHeaders,
-} from "./mcp-http-fetch.js";
+import { buildMcpOAuthHttpFetch } from "./mcp-http-fetch.js";
 import { requesterMcpOAuthStoreKeyPrefix, type McpOAuthIdentity } from "./mcp-oauth-identity.js";
 import {
   createMcpOAuthClientProvider,
@@ -181,6 +177,8 @@ export async function resolveMcpOAuthAccessToken(
         lease,
         storeContext: context,
       });
+      const fetchFn =
+        params.fetchFn ?? buildMcpOAuthHttpFetch({ resourceUrl: params.identity.serverUrl });
       const result = await auth(provider, {
         serverUrl: params.identity.serverUrl,
         resourceMetadataUrl:
@@ -192,7 +190,7 @@ export async function resolveMcpOAuthAccessToken(
           params.scope ??
           normalizeOptionalString(pendingChallenge?.scope) ??
           normalizeOptionalString(params.config?.scope),
-        fetchFn: withMcpOAuthLeaseSignal(params.fetchFn, lease.signal),
+        fetchFn: withMcpOAuthLeaseSignal(fetchFn, lease.signal),
       });
       await lease.assertOwned();
       const refreshedTokens = await provider.tokens();
@@ -306,18 +304,14 @@ function buildMcpOAuthAuthorizationFetch(
   config: ResolvedHttpMcpTransportConfig,
   beforeRequest?: () => void,
 ): FetchLike {
-  const fetchFn = buildMcpHttpFetch({
+  return buildMcpOAuthHttpFetch({
     sslVerify: config.sslVerify,
     clientCert: config.clientCert,
     clientKey: config.clientKey,
     resourceUrl: config.url,
     timeoutMs: config.requestTimeoutMs,
     beforeRequest,
-  });
-  return withSameOriginMcpHttpHeaders({
-    fetchFn,
-    headers: withoutMcpAuthorizationHeader(config.headers),
-    resourceUrl: config.url,
+    headers: config.headers,
   });
 }
 
