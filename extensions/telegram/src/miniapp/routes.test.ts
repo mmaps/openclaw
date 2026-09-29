@@ -326,6 +326,82 @@ describe("registerTelegramMiniAppRoutes", () => {
     });
   });
 
+  it.each(
+    (["account", "command"] as const).flatMap((source) =>
+      (["*", "telegram"] as const).flatMap((channel) =>
+        [
+          { members: ["*"], allowed: false },
+          { members: ["@owner", "999999"], allowed: false },
+          { members: ["telegram:123456"], allowed: true },
+          { members: ["*", "tg:123456"], allowed: true },
+        ].map(({ members, allowed }) => ({ source, channel, members, allowed })),
+      ),
+    ),
+  )(
+    "requires explicit group ownership: $source / $channel / $members",
+    async ({ source, channel, members, allowed }) => {
+      const cfg = config([]);
+      cfg.accessGroups = {
+        operators: { type: "message.senders", members: { [channel]: members } },
+      };
+      if (source === "account") {
+        cfg.channels = {
+          telegram: {
+            botToken: BOT_TOKEN,
+            accounts: { ops: { allowFrom: ["accessGroup:operators"] } },
+          },
+        };
+      } else {
+        cfg.commands = { ownerAllowFrom: ["accessGroup:operators"] };
+      }
+      const commands: OpenClawPluginCommandDefinition[] = [];
+      registerTelegramMiniApp(
+        createTestPluginApi({
+          config: cfg,
+          registerCommand: (command) => commands.push(command),
+        }),
+      );
+      const command = commands.find((entry) => entry.name === "dashboard");
+      if (!command) {
+        throw new Error("expected registered Mini App command");
+      }
+      const reply = await command.handler({
+        channel: "telegram",
+        isAuthorizedSender: true,
+        senderIsOwner: true,
+        commandBody: "/dashboard",
+        config: cfg,
+        accountId: "ops",
+        from: "telegram:123456",
+        sessionKey: "telegram:direct:123456",
+        requestConversationBinding: async () => ({ status: "error", message: "unused" }),
+        detachConversationBinding: async () => ({ removed: false }),
+        getCurrentConversationBinding: async () => null,
+      });
+      if (allowed) {
+        expect(reply.presentation?.blocks).toEqual([expect.objectContaining({ type: "buttons" })]);
+      } else {
+        expect(reply.text).toBe("Restricted to the bot owner.");
+        expect(reply.presentation).toBeUndefined();
+      }
+
+      // A previously issued ticket must not bypass the auth route's owner check.
+      const res = await callRoute({
+        route: createRoute(cfg),
+        method: "POST",
+        url: "/__openclaw_tg_miniapp/auth",
+        contentType: "application/json",
+        body: authBody({ accountId: "ops", nonce: "group-owner" }),
+        ip: `203.0.113.${100 + signedNonceSequence}`,
+      });
+      expect(res.statusCode).toBe(allowed ? 200 : 403);
+      expect(issueDeviceBootstrapToken).toHaveBeenCalledTimes(allowed ? 1 : 0);
+      if (!allowed) {
+        expect(res.body).toBe("Restricted to the bot owner.");
+      }
+    },
+  );
+
   it.each([
     "body",
     "published URL",
