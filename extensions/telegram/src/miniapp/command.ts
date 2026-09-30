@@ -23,7 +23,12 @@ export function registerTelegramMiniAppCommand(
       const accountId = normalizeAccountId(ctx.accountId ?? DEFAULT_ACCOUNT_ID);
       const userId = resolveTelegramDirectUserId(ctx);
       if (!(await isTelegramMiniAppOwner({ cfg, accountId, userId }))) {
-        return { text: "Restricted to the bot owner." };
+        return {
+          text:
+            "Restricted to the bot owner. Ask your OpenClaw administrator to add your numeric " +
+            `Telegram user ID${userId ? ` (${userId})` : ""} to this bot account's allowFrom or ` +
+            "commands.ownerAllowFrom, then retry /dashboard. Wildcards and usernames do not grant dashboard access.",
+        };
       }
       let pageUrl: URL;
       try {

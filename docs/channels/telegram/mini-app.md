@@ -20,6 +20,10 @@ Requirements:
 - Use a DM. In groups, `/dashboard` replies with `open this in a DM with the bot` and sends no button.
 - Docker installs: Serve/Funnel modes require the gateway to bind loopback next to `tailscaled`, which bridge networking with published ports cannot satisfy. Run the gateway container with `network_mode: host` and mount the host `tailscaled` socket (`/var/run/tailscale`) plus the `tailscale` CLI into the container.
 
+If `/dashboard` replies with `Restricted to the bot owner`, ask your OpenClaw administrator to add the numeric Telegram user ID shown in the reply to the selected bot account's `allowFrom` (for example, `channels.telegram.accounts.ops.allowFrom`) or to `commands.ownerAllowFrom` using a `telegram:<userId>` entry. Keep existing allowlist entries and retry `/dashboard` after the configuration change takes effect. The administrator can also add the numeric ID to the Telegram members of an access group already referenced by that owner list.
+
+After an upgrade, wildcard-only access groups no longer grant dashboard launch or Mini App authentication. Add an explicit numeric owner ID to restore access; usernames and wildcards remain insufficient.
+
 Configure one of the supported Tailscale publishing modes:
 
 ```json5

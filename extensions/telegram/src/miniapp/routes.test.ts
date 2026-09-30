@@ -233,13 +233,17 @@ describe("registerTelegramMiniAppRoutes", () => {
     expect(resolveTelegramMiniAppUrls).not.toHaveBeenCalled();
   });
 
-  it("authenticates the registered owner DM launch ticket and rejects group launches", async () => {
+  it("recovers wildcard-only dashboard access with an explicit owner ID and rejects group launches", async () => {
+    const allowFrom = ["accessGroup:operators"];
     const cfg: OpenClawConfig = {
+      accessGroups: {
+        operators: { type: "message.senders", members: { telegram: ["*"] } },
+      },
       channels: {
         telegram: {
           botToken: BOT_TOKEN,
           allowFrom: ["999999"],
-          accounts: { ops: { allowFrom: ["123456"] } },
+          accounts: { ops: { allowFrom } },
         },
       },
       gateway: { tailscale: { mode: "funnel" } },
@@ -283,6 +287,17 @@ describe("registerTelegramMiniAppRoutes", () => {
     expect(resolveTelegramMiniAppUrls).not.toHaveBeenCalled();
     expect(issueDeviceBootstrapToken).not.toHaveBeenCalled();
 
+    const deniedReply = await command.handler(context);
+    expect(deniedReply.text).toContain("administrator");
+    expect(deniedReply.text).toContain("numeric Telegram user ID (123456)");
+    expect(deniedReply.text).toContain("allowFrom");
+    expect(deniedReply.text).toContain("commands.ownerAllowFrom");
+    expect(deniedReply.text).toContain("retry /dashboard");
+    expect(deniedReply.presentation).toBeUndefined();
+    expect(resolveTelegramMiniAppUrls).not.toHaveBeenCalled();
+    expect(issueDeviceBootstrapToken).not.toHaveBeenCalled();
+
+    allowFrom.push("123456");
     const reply = await command.handler(context);
     const buttons = reply.presentation?.blocks.find((block) => block.type === "buttons");
     const webAppUrl = buttons?.buttons[0]?.webApp?.url;
@@ -381,7 +396,7 @@ describe("registerTelegramMiniAppRoutes", () => {
       if (allowed) {
         expect(reply.presentation?.blocks).toEqual([expect.objectContaining({ type: "buttons" })]);
       } else {
-        expect(reply.text).toBe("Restricted to the bot owner.");
+        expect(reply.text).toContain("Restricted to the bot owner.");
         expect(reply.presentation).toBeUndefined();
       }
 
