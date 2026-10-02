@@ -10,8 +10,8 @@ export function registerTelegramMiniAppCommand(
   launchTickets: TelegramMiniAppLaunchTickets,
 ): void {
   api.registerCommand({
-    name: "dashboard",
-    description: "Open the OpenClaw dashboard",
+    name: "controlui",
+    description: "Open the OpenClaw Control UI",
     channels: ["telegram"],
     requireAuth: true,
     exposeSenderIsOwner: true,
@@ -27,7 +27,7 @@ export function registerTelegramMiniAppCommand(
           text:
             "Restricted to the bot owner. Ask your OpenClaw administrator to add your numeric " +
             `Telegram user ID${userId ? ` (${userId})` : ""} to this bot account's allowFrom or ` +
-            "commands.ownerAllowFrom, then retry /dashboard. Wildcards and usernames do not grant dashboard access.",
+            "commands.ownerAllowFrom, then retry /controlui. Wildcards and usernames do not grant Control UI access.",
         };
       }
       let pageUrl: URL;
@@ -41,12 +41,12 @@ export function registerTelegramMiniAppCommand(
         launchTicket: launchTickets.issue({ accountId, userId }),
       }).toString();
       return {
-        text: "Open OpenClaw dashboard.",
+        text: "Open OpenClaw Control UI.",
         presentation: {
           blocks: [
             {
               type: "buttons",
-              buttons: [{ label: "Open dashboard", webApp: { url: pageUrl.toString() } }],
+              buttons: [{ label: "Open Control UI", webApp: { url: pageUrl.toString() } }],
             },
           ],
         },

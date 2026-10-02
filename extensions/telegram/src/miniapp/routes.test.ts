@@ -233,7 +233,7 @@ describe("registerTelegramMiniAppRoutes", () => {
     expect(resolveTelegramMiniAppUrls).not.toHaveBeenCalled();
   });
 
-  it("recovers wildcard-only dashboard access with an explicit owner ID and rejects group launches", async () => {
+  it("recovers wildcard-only Control UI access with an explicit owner ID and rejects group launches", async () => {
     const allowFrom = ["accessGroup:operators"];
     const cfg: OpenClawConfig = {
       accessGroups: {
@@ -257,7 +257,7 @@ describe("registerTelegramMiniAppRoutes", () => {
         registerHttpRoute: (route) => routes.push(route),
       }),
     );
-    const command = commands.find((entry) => entry.name === "dashboard");
+    const command = commands.find((entry) => entry.name === "controlui");
     const route = routes.find((entry) => entry.path === "/__openclaw_tg_miniapp/");
     if (!command || !route) {
       throw new Error("expected registered Mini App command and route");
@@ -266,7 +266,7 @@ describe("registerTelegramMiniAppRoutes", () => {
       channel: "telegram",
       isAuthorizedSender: true,
       senderIsOwner: false,
-      commandBody: "/dashboard",
+      commandBody: "/controlui",
       config: cfg,
       accountId: "ops",
       from: "telegram:123456",
@@ -292,7 +292,7 @@ describe("registerTelegramMiniAppRoutes", () => {
     expect(deniedReply.text).toContain("numeric Telegram user ID (123456)");
     expect(deniedReply.text).toContain("allowFrom");
     expect(deniedReply.text).toContain("commands.ownerAllowFrom");
-    expect(deniedReply.text).toContain("retry /dashboard");
+    expect(deniedReply.text).toContain("retry /controlui");
     expect(deniedReply.presentation).toBeUndefined();
     expect(resolveTelegramMiniAppUrls).not.toHaveBeenCalled();
     expect(issueDeviceBootstrapToken).not.toHaveBeenCalled();
@@ -376,7 +376,7 @@ describe("registerTelegramMiniAppRoutes", () => {
           registerCommand: (command) => commands.push(command),
         }),
       );
-      const command = commands.find((entry) => entry.name === "dashboard");
+      const command = commands.find((entry) => entry.name === "controlui");
       if (!command) {
         throw new Error("expected registered Mini App command");
       }
@@ -384,7 +384,7 @@ describe("registerTelegramMiniAppRoutes", () => {
         channel: "telegram",
         isAuthorizedSender: true,
         senderIsOwner: true,
-        commandBody: "/dashboard",
+        commandBody: "/controlui",
         config: cfg,
         accountId: "ops",
         from: "telegram:123456",
@@ -530,7 +530,7 @@ describe("registerTelegramMiniAppRoutes", () => {
     });
 
     expect(replay.statusCode).toBe(401);
-    expect(replay.body).toBe("This link expired. Reopen the dashboard from your bot chat.");
+    expect(replay.body).toBe("This link expired. Run /controlui again in your bot chat.");
     expect(issueDeviceBootstrapToken).toHaveBeenCalledTimes(1);
   });
 
@@ -600,7 +600,7 @@ describe("registerTelegramMiniAppRoutes", () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(res.body).toBe("This link expired. Reopen the dashboard from your bot chat.");
+    expect(res.body).toBe("This link expired. Run /controlui again in your bot chat.");
     expect(issueDeviceBootstrapToken).not.toHaveBeenCalled();
   });
 
@@ -656,7 +656,7 @@ describe("registerTelegramMiniAppRoutes", () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(res.body).toBe("This link expired. Reopen the dashboard from your bot chat.");
+    expect(res.body).toBe("This link expired. Run /controlui again in your bot chat.");
     expect(issueDeviceBootstrapToken).not.toHaveBeenCalled();
   });
 
