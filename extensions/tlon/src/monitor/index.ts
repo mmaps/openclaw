@@ -770,7 +770,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const messageText = (await resolveTlonCitations(contentBody, api, runtime)) + rawText;
+      const messageText = (await resolveTlonCitations(contentBody, nest, api, runtime)) + rawText;
 
       await processMessage({
         messageId,
@@ -949,7 +949,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
       }
 
       const resolvedMessageText =
-        (await resolveTlonCitations(essay.content, api, runtime)) + rawText;
+        (await resolveTlonCitations(essay.content, null, api, runtime)) + rawText;
       if (ownerDm) {
         runtime.log?.(`[tlon] Processing DM from owner ${senderShip}`);
       }

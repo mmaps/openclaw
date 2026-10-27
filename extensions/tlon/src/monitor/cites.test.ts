@@ -28,7 +28,8 @@ function makeResolver() {
   const runtime = { log: vi.fn() } as unknown as RuntimeEnv;
   return {
     scry,
-    resolveAllCites: (content: unknown) => resolveTlonCitations(content, { scry }, runtime),
+    resolveAllCites: (content: unknown, sourceChannelNest: string | null = NEST) =>
+      resolveTlonCitations(content, sourceChannelNest, { scry }, runtime),
   };
 }
 

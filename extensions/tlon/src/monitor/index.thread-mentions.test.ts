@@ -196,45 +196,61 @@ describe("monitorTlonProvider bot-owned thread mention policy", () => {
   });
 });
 
-it("fetches and prepends citations only after DM and channel sender admission", async () => {
+it("expands citations only from the admitted source channel", async () => {
   const nest = "chat/~zod/citations";
-  const content = [
-    { block: { cite: { chan: { nest, where: "/msg/~bus/12345" } } } },
-    { inline: ["~zod inspect this citation"] },
-  ];
   configureTlon({
     dmAllowlist: ["~bus"],
     defaultAuthorizedShips: ["~bus"],
     groupChannels: [nest],
   });
   await runMonitor(async () => {
-    for (const source of ["chat", "channels"]) {
+    for (const { source, sender, citedNest, expands } of [
+      { source: "chat", sender: "~nec", citedNest: nest, expands: false },
+      { source: "chat", sender: "~bus", citedNest: nest, expands: false },
+      { source: "channels", sender: "~nec", citedNest: nest, expands: false },
+      { source: "channels", sender: "~bus", citedNest: nest, expands: true },
+      {
+        source: "channels",
+        sender: "~bus",
+        citedNest: "chat/~private/leadership",
+        expands: false,
+      },
+    ] as const) {
       const subscription = getSubscription(source);
-      for (const sender of ["~nec", "~bus"]) {
-        sseClientMock.scry.mockReset().mockResolvedValue({
-          essay: { content: [{ inline: ["CITED-CONTENT"] }] },
-        });
-        inboundRuntimeMock.buildContext.mockClear();
-        inboundRuntimeMock.dispatch.mockClear();
-        const essay = messageEssay(sender, content);
-        const id = `${source}-${sender}`;
-        await subscription.event(
-          source === "chat"
-            ? { whom: sender, id, response: { add: { essay } } }
-            : { nest, response: { post: { id, "r-post": { set: { essay } } } } },
+      sseClientMock.scry.mockReset().mockResolvedValue({
+        essay: { content: [{ inline: ["CITED-CONTENT"] }] },
+      });
+      inboundRuntimeMock.buildContext.mockClear();
+      inboundRuntimeMock.dispatch.mockClear();
+      const content = [
+        { block: { cite: { chan: { nest: citedNest, where: "/msg/~bus/12345" } } } },
+        { inline: ["~zod inspect this citation"] },
+      ];
+      const essay = messageEssay(sender, content);
+      const id = `${source}-${sender}-${citedNest}`;
+      await subscription.event(
+        source === "chat"
+          ? { whom: sender, id, response: { add: { essay } } }
+          : { nest, response: { post: { id, "r-post": { set: { essay } } } } },
+      );
+      if (sender === "~nec") {
+        expect(sseClientMock.scry).not.toHaveBeenCalled();
+        expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
+        continue;
+      }
+      expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
+      if (expands) {
+        expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
+          `/channels/v4/${nest}/posts/post/12345.json`,
         );
-        if (sender === "~nec") {
-          expect(sseClientMock.scry).not.toHaveBeenCalled();
-          expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
-        } else {
-          expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
-            `/channels/v4/${nest}/posts/post/12345.json`,
-          );
-          expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toBe(
-            `> ~bus wrote: CITED-CONTENT\n\n> [quoted: ~bus in ${nest}]\n\n~zod inspect this citation`,
-          );
-          expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
-        }
+        expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toBe(
+          `> ~bus wrote: CITED-CONTENT\n\n> [quoted: ~bus in ${nest}]\n\n~zod inspect this citation`,
+        );
+      } else {
+        expect(sseClientMock.scry).not.toHaveBeenCalled();
+        expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toBe(
+          `> [quoted: ~bus in ${citedNest}]\n\n~zod inspect this citation`,
+        );
       }
     }
   });

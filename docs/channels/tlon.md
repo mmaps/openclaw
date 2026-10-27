@@ -157,6 +157,10 @@ baseline, and override per channel nest:
 }
 ```
 
+Tlon expands a channel citation's post body only when the citation points to the channel carrying
+the message. Citations in DMs or to another channel stay as opaque quoted references; the bot does
+not fetch them.
+
 Once the bot has replied inside a thread, it keeps responding to later messages in that thread
 without requiring another mention.
 
