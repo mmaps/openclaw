@@ -63,7 +63,7 @@ describe("Tlon citation scry path composition", () => {
   ])("makes no authenticated request for %s", async (_label, nest) => {
     const { scry, resolveAllCites } = makeResolver();
 
-    const resolved = await resolveAllCites(citedContent({ nest, postId: "12345" }));
+    const resolved = await resolveAllCites(citedContent({ nest, postId: "12345" }), nest);
 
     expect(scry).not.toHaveBeenCalled();
     expect(resolved).toBe("");
