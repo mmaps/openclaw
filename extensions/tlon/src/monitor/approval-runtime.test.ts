@@ -86,3 +86,17 @@ describe("Tlon pending approval limit", () => {
     expect(fixture.state.pendingApprovals[0]?.verifiedDirect).toBeUndefined();
   });
 });
+
+describe("Tlon approval targeting", () => {
+  it("does not apply a bare decision to any pending request", async () => {
+    const fixture = createFixture();
+
+    expect(await fixture.handleApprovalResponse("approve")).toBe(true);
+
+    expect(fixture.state.effectiveDmAllowlist).toEqual([]);
+    expect(fixture.state.pendingApprovals).toEqual(fixture.approvals);
+    expect(JSON.stringify(fixture.poke.mock.calls)).toContain("Include an approval ID");
+    expect(JSON.stringify(fixture.poke.mock.calls)).toContain("dm-0");
+    expect(JSON.stringify(fixture.poke.mock.calls)).toContain("dm-99");
+  });
+});

@@ -213,14 +213,16 @@ approval and DM the owner:
 
 The owner replies in DM to act on a request:
 
-| Owner reply                  | Effect                                               |
-| ---------------------------- | ---------------------------------------------------- |
-| `approve` / `deny` / `block` | Acts on the most recent pending approval             |
-| `approve <id>` / `deny <id>` | Acts on a specific approval by id                    |
-| `block`                      | Also blocks the ship natively so it cannot reconnect |
-| `unblock ~ship`              | Reverses a native block                              |
-| `blocked`                    | Lists currently blocked ships                        |
-| `pending`                    | Lists pending approval requests                      |
+| Owner reply                  | Effect                                           |
+| ---------------------------- | ------------------------------------------------ |
+| `approve <id>` / `deny <id>` | Acts on a specific pending approval              |
+| `block <id>`                 | Blocks that ship natively so it cannot reconnect |
+| `unblock ~ship`              | Reverses a native block                          |
+| `blocked`                    | Lists currently blocked ships                    |
+| `pending`                    | Lists pending approval requests                  |
+
+Approval decisions require an ID. A reply without one lists the pending requests and does not act
+on any of them.
 
 Without `ownerShip` configured, unauthorized DMs and channel mentions are just dropped and logged;
 there is no approval prompt.

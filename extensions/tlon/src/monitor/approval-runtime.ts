@@ -195,7 +195,7 @@ export function createTlonApprovalRuntime(params: {
       if (!approvalOverflowNoticeSent && approvalOverflowNoticeAttempts < 3) {
         approvalOverflowNoticeAttempts += 1;
         approvalOverflowNoticeSent = await sendOwnerNotification(
-          `Pending approval queue is full (${approvals.length}). Resolve existing requests with approve, deny, or block before asking rejected requesters to retry.`,
+          `Pending approval queue is full (${approvals.length}). Resolve existing requests by replying with approve, deny, or block followed by the request ID before asking rejected requesters to retry.`,
         );
       }
       return false;
@@ -218,11 +218,16 @@ export function createTlonApprovalRuntime(params: {
       return false;
     }
 
+    if (!parsed.id) {
+      await sendOwnerNotification(
+        `Include an approval ID with your decision. Reply with approve, deny, or block followed by one of the IDs below.\n\n${formatPendingList(state.pendingApprovals)}`,
+      );
+      return true;
+    }
+
     const approval = findPendingApproval(state.pendingApprovals, parsed.id);
     if (!approval) {
-      await sendOwnerNotification(
-        `No pending approval found${parsed.id ? ` for ID: ${parsed.id}` : ""}`,
-      );
+      await sendOwnerNotification(`No pending approval found for ID: ${parsed.id}`);
       return true;
     }
 
