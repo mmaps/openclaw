@@ -20,7 +20,7 @@ function citedContent(params: { nest?: string; postId: string }): unknown {
   ];
 }
 
-function makeResolver() {
+function makeResolver(canExpandNest: (nest: string) => boolean = () => true) {
   // Typed parameter so the recorded call captures the exact composed scry path.
   const scry = vi.fn(async (_path: string) => ({
     essay: { content: [{ inline: ["PRIVATE-CONTENT"] }] },
@@ -28,8 +28,8 @@ function makeResolver() {
   const runtime = { log: vi.fn() } as unknown as RuntimeEnv;
   return {
     scry,
-    resolveAllCites: (content: unknown, sourceChannelNest: string | null = NEST) =>
-      resolveTlonCitations(content, sourceChannelNest, { scry }, runtime),
+    resolveAllCites: (content: unknown) =>
+      resolveTlonCitations(content, canExpandNest, { scry }, runtime),
   };
 }
 
@@ -63,7 +63,16 @@ describe("Tlon citation scry path composition", () => {
   ])("makes no authenticated request for %s", async (_label, nest) => {
     const { scry, resolveAllCites } = makeResolver();
 
-    const resolved = await resolveAllCites(citedContent({ nest, postId: "12345" }), nest);
+    const resolved = await resolveAllCites(citedContent({ nest, postId: "12345" }));
+
+    expect(scry).not.toHaveBeenCalled();
+    expect(resolved).toBe("");
+  });
+
+  it("makes no authenticated request when the cited channel is not expandable", async () => {
+    const { scry, resolveAllCites } = makeResolver(() => false);
+
+    const resolved = await resolveAllCites(citedContent({ postId: "12345" }));
 
     expect(scry).not.toHaveBeenCalled();
     expect(resolved).toBe("");

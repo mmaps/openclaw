@@ -714,7 +714,6 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const contentBody = content.content;
       const sentAt = asFiniteNumber(content?.sent) ?? Date.now();
 
       channelHistory.cacheMessage(nest, {
@@ -755,7 +754,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
             originalMessage: {
               messageId,
               messageText: rawText,
-              messageContent: contentBody,
+              messageContent: content.content,
               timestamp: sentAt,
               parentId: parentId ?? undefined,
               isThreadReply,
@@ -770,13 +769,14 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const messageText = (await resolveTlonCitations(contentBody, nest, api, runtime)) + rawText;
+      const can = (cited: string) => watchedChannels.has(cited),
+        messageText = (await resolveTlonCitations(content.content, can, api, runtime)) + rawText;
 
       await processMessage({
         messageId,
         senderShip,
         messageText,
-        messageContent: contentBody,
+        messageContent: content.content,
         isGroup: true,
         channelNest: nest,
         timestamp: sentAt,
@@ -948,13 +948,13 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const resolvedMessageText =
-        (await resolveTlonCitations(essay.content, null, api, runtime)) + rawText;
+      const canExpand = (cited: string) => ownerDm || watchedChannels.has(cited),
+        agentText = (await resolveTlonCitations(essay.content, canExpand, api, runtime)) + rawText;
       if (ownerDm) {
         runtime.log?.(`[tlon] Processing DM from owner ${senderShip}`);
       }
       await processMessage({
-        messageText: resolvedMessageText,
+        messageText: agentText,
         messageId,
         senderShip,
         clubId,

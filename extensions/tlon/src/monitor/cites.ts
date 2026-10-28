@@ -46,7 +46,7 @@ function buildCitedPostScryPath(nest: string, postId: string): string | null {
 
 export async function resolveTlonCitations(
   content: unknown,
-  sourceChannelNest: string | null,
+  canExpandNest: (nest: string) => boolean,
   api: Pick<UrbitSSEClient, "scry">,
   runtime: RuntimeEnv,
 ): Promise<string> {
@@ -63,8 +63,8 @@ export async function resolveTlonCitations(
     if (!nest || !postId) {
       continue;
     }
-    if (nest !== sourceChannelNest) {
-      runtime.log?.("[tlon] Skipping cited post: citation is outside the current channel");
+    if (!canExpandNest(nest)) {
+      runtime.log?.("[tlon] Skipping cited post: citation is outside watched channels");
       continue;
     }
     const scryPath = buildCitedPostScryPath(nest, postId);

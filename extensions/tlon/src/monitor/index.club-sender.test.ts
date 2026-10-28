@@ -35,7 +35,13 @@ function chatSubscription() {
   return subscription;
 }
 
-function chatEvent(params: { whom: string; author: string; text: string; id: string }) {
+function chatEvent(params: {
+  whom: string;
+  author: string;
+  text?: string;
+  content?: unknown;
+  id: string;
+}) {
   return {
     whom: params.whom,
     id: params.id,
@@ -43,7 +49,7 @@ function chatEvent(params: { whom: string; author: string; text: string; id: str
       add: {
         essay: {
           author: params.author,
-          content: [{ inline: [params.text] }],
+          content: params.content ?? [{ inline: [params.text ?? ""] }],
           sent: 1_700_000_000_000,
         },
       },
@@ -101,14 +107,24 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
     });
   });
 
-  it("never presents a club owner claim as the owner when the claim is admitted", async () => {
+  it("never grants owner identity or citation access to an admitted club owner claim", async () => {
     inboundRuntimeMock.shouldComputeCommandAuthorized.mockReturnValueOnce(true);
     startMonitorDefaults({ dmAllowlist: [OWNER] });
     await withMonitor(async () => {
+      sseClientMock.scry.mockClear();
       await chatSubscription().event(
-        chatEvent({ whom: CLUB_ID, author: OWNER, text: "/restart", id: "~bus/3" }),
+        chatEvent({
+          whom: CLUB_ID,
+          author: OWNER,
+          content: [
+            { block: { cite: { chan: { nest: "diary/~private/notes", where: "/msg/~bus/1" } } } },
+            { inline: ["/restart"] },
+          ],
+          id: "~bus/3",
+        }),
       );
 
+      expect(sseClientMock.scry).not.toHaveBeenCalled();
       expect(inboundRuntimeMock.buildContext).toHaveBeenCalledOnce();
       const [context] = inboundRuntimeMock.buildContext.mock.calls[0] as [
         {
@@ -143,13 +159,27 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
     });
   });
 
-  it("still treats the owner's 1:1 DM as the owner", async () => {
+  it("still grants owner identity and citation access to the owner's 1:1 DM", async () => {
     startMonitorDefaults();
     await withMonitor(async () => {
+      sseClientMock.scry.mockClear().mockResolvedValue({
+        essay: { content: [{ inline: ["CITED-CONTENT"] }] },
+      });
       await chatSubscription().event(
-        chatEvent({ whom: OWNER, author: OWNER, text: "hello", id: "~nec/5" }),
+        chatEvent({
+          whom: OWNER,
+          author: OWNER,
+          content: [
+            { block: { cite: { chan: { nest: "diary/~private/notes", where: "/msg/~bus/1" } } } },
+            { inline: ["hello"] },
+          ],
+          id: "~nec/5",
+        }),
       );
 
+      expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
+        "/channels/v4/diary/~private/notes/posts/post/1.json",
+      );
       expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
       expect(inboundRuntimeMock.buildContext).toHaveBeenCalledWith(
         expect.objectContaining({

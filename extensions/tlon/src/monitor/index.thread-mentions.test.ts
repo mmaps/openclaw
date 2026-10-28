@@ -196,25 +196,43 @@ describe("monitorTlonProvider bot-owned thread mention policy", () => {
   });
 });
 
-it("expands citations only from the admitted source channel", async () => {
+it("expands citations only from watched channels after sender admission", async () => {
   const nest = "chat/~zod/citations";
+  const otherWatchedNest = "chat/~zod/announcements";
+  const unwatchedNest = "chat/~private/leadership";
   configureTlon({
     dmAllowlist: ["~bus"],
     defaultAuthorizedShips: ["~bus"],
-    groupChannels: [nest],
+    groupChannels: [nest, otherWatchedNest],
   });
   await runMonitor(async () => {
-    for (const { source, sender, citedNest, expands } of [
-      { source: "chat", sender: "~nec", citedNest: nest, expands: false },
-      { source: "chat", sender: "~bus", citedNest: nest, expands: false },
-      { source: "channels", sender: "~nec", citedNest: nest, expands: false },
-      { source: "channels", sender: "~bus", citedNest: nest, expands: true },
+    for (const { source, sender, citedNest, admitted, expands } of [
+      { source: "chat", sender: "~nec", citedNest: nest, admitted: false, expands: false },
+      { source: "channels", sender: "~nec", citedNest: nest, admitted: false, expands: false },
+      { source: "channels", sender: "~bus", citedNest: nest, admitted: true, expands: true },
       {
         source: "channels",
         sender: "~bus",
-        citedNest: "chat/~private/leadership",
+        citedNest: otherWatchedNest,
+        admitted: true,
+        expands: true,
+      },
+      {
+        source: "channels",
+        sender: "~bus",
+        citedNest: unwatchedNest,
+        admitted: true,
         expands: false,
       },
+      {
+        source: "channels",
+        sender: "~bus",
+        citedNest: "diary/~private/notes",
+        admitted: true,
+        expands: false,
+      },
+      { source: "chat", sender: "~bus", citedNest: nest, admitted: true, expands: true },
+      { source: "chat", sender: "~bus", citedNest: unwatchedNest, admitted: true, expands: false },
     ] as const) {
       const subscription = getSubscription(source);
       sseClientMock.scry.mockReset().mockResolvedValue({
@@ -233,7 +251,7 @@ it("expands citations only from the admitted source channel", async () => {
           ? { whom: sender, id, response: { add: { essay } } }
           : { nest, response: { post: { id, "r-post": { set: { essay } } } } },
       );
-      if (sender === "~nec") {
+      if (!admitted) {
         expect(sseClientMock.scry).not.toHaveBeenCalled();
         expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
         continue;
@@ -241,10 +259,10 @@ it("expands citations only from the admitted source channel", async () => {
       expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
       if (expands) {
         expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
-          `/channels/v4/${nest}/posts/post/12345.json`,
+          `/channels/v4/${citedNest}/posts/post/12345.json`,
         );
         expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toBe(
-          `> ~bus wrote: CITED-CONTENT\n\n> [quoted: ~bus in ${nest}]\n\n~zod inspect this citation`,
+          `> ~bus wrote: CITED-CONTENT\n\n> [quoted: ~bus in ${citedNest}]\n\n~zod inspect this citation`,
         );
       } else {
         expect(sseClientMock.scry).not.toHaveBeenCalled();
