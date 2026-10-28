@@ -240,6 +240,45 @@ it("fetches and prepends citations only after DM and channel sender admission", 
   });
 });
 
+it("requires an explicit ID before approving a restricted channel mention", async () => {
+  const nest = "chat/~host/general";
+  configureTlon({ ownerShip: "~nec", groupChannels: [nest] });
+  const ownerNotices = () =>
+    JSON.stringify(
+      sseClientMock.poke.mock.calls.filter(([payload]) => payload.mark === "chat-dm-action"),
+    );
+  const channelRuleWrites = () =>
+    sseClientMock.poke.mock.calls
+      .map(([payload]) => payload.json?.["put-entry"])
+      .filter((entry) => entry?.["entry-key"] === "channelRules");
+  await runMonitor(async () => {
+    const ownerReply = (id: string, text: string) =>
+      getSubscription("chat").event({
+        whom: "~nec",
+        id,
+        response: { add: { essay: messageEssay("~nec", text) } },
+      });
+    const essay = messageEssay("~bus", "~zod hi");
+    await getSubscription("channels").event({
+      nest,
+      response: { post: { id: "mention", "r-post": { set: { essay } } } },
+    });
+    const approvalId = ownerNotices().match(/channel-\d+-[a-f0-9]+/)?.[0];
+    expect(approvalId).toBeDefined();
+
+    await ownerReply("bare-approve", "approve");
+    expect(ownerNotices()).toContain("Include an approval ID");
+    expect(channelRuleWrites()).toEqual([]);
+    expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
+
+    await ownerReply("explicit-approve", `approve ${approvalId}`);
+    expect(channelRuleWrites()).toHaveLength(1);
+    expect(JSON.parse(String(channelRuleWrites()[0]?.value))).toEqual({
+      [nest]: { mode: "restricted", allowedShips: ["~bus"] },
+    });
+  });
+});
+
 it("retires terminal group invites without forgetting unrelated foreigns deltas", async () => {
   configureTlon({
     autoAcceptGroupInvites: true,
