@@ -948,8 +948,8 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const canExpand = (cited: string) => ownerDm || watchedChannels.has(cited),
-        agentText = (await resolveTlonCitations(essay.content, canExpand, api, runtime)) + rawText;
+      const can = (nest: string) => (!clubId && isOwner(senderShip)) || watchedChannels.has(nest),
+        agentText = (await resolveTlonCitations(essay.content, can, api, runtime)) + rawText;
       if (ownerDm) {
         runtime.log?.(`[tlon] Processing DM from owner ${senderShip}`);
       }

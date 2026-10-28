@@ -159,11 +159,12 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
     });
   });
 
-  it("still grants owner identity and citation access to the owner's 1:1 DM", async () => {
+  it("rechecks owner citation access between reads in the owner's 1:1 DM", async () => {
     startMonitorDefaults();
     await withMonitor(async () => {
-      sseClientMock.scry.mockClear().mockResolvedValue({
-        essay: { content: [{ inline: ["CITED-CONTENT"] }] },
+      sseClientMock.scry.mockClear().mockImplementationOnce(async () => {
+        settingsManagerMock.startSubscription.mock.calls[0]?.[0]({ ownerShip: "~bus" });
+        return { essay: { content: [{ inline: ["CITED-CONTENT"] }] } };
       });
       await chatSubscription().event(
         chatEvent({
@@ -171,6 +172,11 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
           author: OWNER,
           content: [
             { block: { cite: { chan: { nest: "diary/~private/notes", where: "/msg/~bus/1" } } } },
+            {
+              block: {
+                cite: { chan: { nest: "heap/~private/gallery", where: "/msg/~bus/2" } },
+              },
+            },
             { inline: ["hello"] },
           ],
           id: "~nec/5",
@@ -184,7 +190,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
       expect(inboundRuntimeMock.buildContext).toHaveBeenCalledWith(
         expect.objectContaining({
           from: `tlon:${OWNER}`,
-          sender: expect.objectContaining({ id: OWNER, roles: ["owner"] }),
+          sender: expect.objectContaining({ id: OWNER, roles: ["user"] }),
         }),
       );
     });
