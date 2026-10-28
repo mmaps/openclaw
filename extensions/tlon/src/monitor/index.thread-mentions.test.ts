@@ -32,12 +32,10 @@ async function runMonitor(run: () => Promise<void>) {
 }
 
 type CitationCase = readonly ["chat" | "channels", string, string, boolean, boolean];
+const citedEssay = { essay: { content: [{ inline: ["CITED-CONTENT"] }] } };
 async function checkCitationCase(sourceNest: string, row: CitationCase) {
-  const [source, sender, cited, admitted, expands] = row,
-    id = `${source}-${sender}-${cited}`;
-  sseClientMock.scry.mockReset().mockResolvedValue({
-    essay: { content: [{ inline: ["CITED-CONTENT"] }] },
-  });
+  const [source, sender, cited, admitted, expands] = row;
+  sseClientMock.scry.mockReset().mockResolvedValue(citedEssay);
   inboundRuntimeMock.dispatch.mockClear();
   const essay = messageEssay(sender, [
     { block: { cite: { chan: { nest: cited, where: "/msg/~bus/12345" } } } },
@@ -45,17 +43,13 @@ async function checkCitationCase(sourceNest: string, row: CitationCase) {
   ]);
   await getSubscription(source).event(
     source === "chat"
-      ? { whom: sender, id, response: { add: { essay } } }
-      : { nest: sourceNest, response: { post: { id, "r-post": { set: { essay } } } } },
+      ? { whom: sender, id: cited, response: { add: { essay } } }
+      : { nest: sourceNest, response: { post: { id: cited, "r-post": { set: { essay } } } } },
   );
   expect(inboundRuntimeMock.dispatch).toHaveBeenCalledTimes(admitted ? 1 : 0);
-  expect(sseClientMock.scry).toHaveBeenCalledTimes(expands ? 1 : 0);
-  if (!admitted) {
-    return;
-  }
-  if (expands) {
-    expect(sseClientMock.scry).toHaveBeenCalledWith(`/channels/v4/${cited}/posts/post/12345.json`);
-  }
+  expect(sseClientMock.scry.mock.calls).toEqual(
+    expands ? [[`/channels/v4/${cited}/posts/post/12345.json`]] : [],
+  );
 }
 
 describe("monitorTlonProvider bot-owned thread mention policy", () => {

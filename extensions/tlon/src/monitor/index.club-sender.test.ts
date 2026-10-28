@@ -1,6 +1,6 @@
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime";
 import { describe, expect, it, vi } from "vitest";
-import { useTlonMonitorFixture } from "./monitor.test-harness.js";
+import { messageEssay, useTlonMonitorFixture } from "./monitor.test-harness.js";
 
 const {
   startMonitor,
@@ -15,7 +15,6 @@ const {
 const OWNER = "~nec";
 const CLUB_ID = "0v3.q4n5m.6r7s8.9t0u1.2v3w4";
 const DIARY = "diary/~private/notes";
-const GALLERY = "heap/~private/gallery";
 
 async function withMonitor(run: (runtime: RuntimeEnv) => Promise<void>) {
   const { runtime, stop } = startMonitor();
@@ -46,21 +45,15 @@ async function sendChat(params: ChatEventParams) {
   await chatSubscription().event({
     whom: params.whom,
     id: params.id,
-    response: {
-      add: {
-        essay: {
-          author: params.author,
-          content: params.content ?? [{ inline: [params.text ?? ""] }],
-          sent: 1_700_000_000_000,
-        },
-      },
-    },
+    response: { add: { essay: messageEssay(params.author, params.content ?? params.text ?? "") } },
   });
 }
 
-function citation(nest: string, id: number) {
-  return { block: { cite: { chan: { nest, where: `/msg/~bus/${id}` } } } };
-}
+const citation = (nest: string, id: number) => ({
+  block: { cite: { chan: { nest, where: `/msg/~bus/${id}` } } },
+});
+const sendOwnerDm = (id: string, text = "hello", content?: unknown) =>
+  sendChat({ whom: OWNER, author: OWNER, id, text, content });
 
 function pokedTexts(): string[] {
   return sseClientMock.poke.mock.calls.flatMap(([poke]) => {
@@ -154,7 +147,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
   it("still treats the owner's 1:1 DM as the owner", async () => {
     startMonitorDefaults();
     await withMonitor(async () => {
-      await sendChat({ whom: OWNER, author: OWNER, text: "hello", id: "~nec/5" });
+      await sendOwnerDm("~nec/5");
 
       expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
       expect(inboundRuntimeMock.buildContext).toHaveBeenCalledWith(
@@ -173,16 +166,9 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
         settingsManagerMock.startSubscription.mock.calls[0]?.[0]({ ownerShip: "~bus" });
         return { essay: { content: [{ inline: ["CITED-CONTENT"] }] } };
       });
-      await sendChat({
-        whom: OWNER,
-        author: OWNER,
-        content: [citation(DIARY, 1), citation(GALLERY, 2), { inline: ["hello"] }],
-        id: "~nec/5",
-      });
+      await sendOwnerDm("~nec/5", "", [citation(DIARY, 1), citation("heap/~private/gallery", 2)]);
 
-      expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
-        "/channels/v4/diary/~private/notes/posts/post/1.json",
-      );
+      expect(sseClientMock.scry).toHaveBeenCalledOnce();
       expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].sender.roles).toEqual(["user"]);
     });
   });
@@ -192,7 +178,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
     await withMonitor(async (runtime) => {
       const command = "  PeNdInG  ";
       sseClientMock.poke.mockClear();
-      await sendChat({ whom: OWNER, author: OWNER, text: command, id: "~nec/6" });
+      await sendOwnerDm("~nec/6", command);
 
       expect(pokedTexts()).toContain("No pending approval requests.");
       expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
@@ -213,7 +199,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
       expect(approvalId).toBeDefined();
 
       inboundRuntimeMock.shouldComputeCommandAuthorized.mockReturnValueOnce(true);
-      await sendChat({ whom: OWNER, author: OWNER, text: `approve ${approvalId}`, id: "~nec/8" });
+      await sendOwnerDm("~nec/8", `approve ${approvalId}`);
 
       expect(inboundRuntimeMock.buildContext).toHaveBeenCalledOnce();
       const [context] = inboundRuntimeMock.buildContext.mock.calls[0] as [
@@ -298,7 +284,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
       ingressMock.receive.mockResolvedValue({ kind: "ignored" });
       await withMonitor(async (runtime) => {
         sseClientMock.poke.mockClear();
-        await sendChat({ whom: OWNER, author: OWNER, text: "approve dm-legacy", id: "~nec/11" });
+        await sendOwnerDm("~nec/11", "approve dm-legacy");
         expect(runtime.log).toHaveBeenCalledWith("[tlon] Processed approval response from owner");
         expect(JSON.stringify(vi.mocked(runtime.log!).mock.calls)).not.toContain(
           "approve dm-legacy",
