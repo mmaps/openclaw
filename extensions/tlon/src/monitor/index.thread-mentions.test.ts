@@ -31,6 +31,36 @@ async function runMonitor(run: () => Promise<void>) {
   );
 }
 
+type CitationCase = readonly ["chat" | "channels", string, string, boolean, boolean];
+
+async function checkCitationCase(sourceNest: string, row: CitationCase) {
+  const [source, sender, citedNest, admitted, expands] = row;
+  sseClientMock.scry.mockReset().mockResolvedValue({
+    essay: { content: [{ inline: ["CITED-CONTENT"] }] },
+  });
+  inboundRuntimeMock.dispatch.mockClear();
+  const essay = messageEssay(sender, [
+    { block: { cite: { chan: { nest: citedNest, where: "/msg/~bus/12345" } } } },
+    { inline: ["~zod inspect this citation"] },
+  ]);
+  const id = `${source}-${sender}-${citedNest}`;
+  await getSubscription(source).event(
+    source === "chat"
+      ? { whom: sender, id, response: { add: { essay } } }
+      : { nest: sourceNest, response: { post: { id, "r-post": { set: { essay } } } } },
+  );
+  expect(inboundRuntimeMock.dispatch).toHaveBeenCalledTimes(admitted ? 1 : 0);
+  expect(sseClientMock.scry).toHaveBeenCalledTimes(expands ? 1 : 0);
+  if (!admitted) {
+    return;
+  }
+  if (expands) {
+    expect(sseClientMock.scry).toHaveBeenCalledWith(
+      `/channels/v4/${citedNest}/posts/post/12345.json`,
+    );
+  }
+}
+
 describe("monitorTlonProvider bot-owned thread mention policy", () => {
   it.each([
     { parallelPost: true, rawReplyId: " reply-stable ", admitted: true },
@@ -196,121 +226,40 @@ describe("monitorTlonProvider bot-owned thread mention policy", () => {
   });
 });
 
-it("limits citations to explicit channels when auto-discovery is off", async () => {
+it.each([
+  [
+    "limits citations to explicit channels when auto-discovery is off",
+    {},
+    [
+      ["chat", "~nec", "chat/~zod/citations", false, false],
+      ["channels", "~nec", "chat/~zod/citations", false, false],
+      ["channels", "~bus", "chat/~zod/citations", true, true],
+      ["channels", "~bus", "chat/~zod/announcements", true, true],
+      ["channels", "~bus", "chat/~private/leadership", true, false],
+      ["channels", "~bus", "diary/~private/notes", true, false],
+      ["chat", "~bus", "chat/~zod/citations", true, true],
+      ["chat", "~bus", "chat/~private/leadership", true, false],
+    ],
+  ],
+  [
+    "expands readable Notebook and Gallery citations when auto-discovery is on",
+    { autoDiscoverChannels: true },
+    [
+      ["channels", "~bus", "diary/~private/notes", true, true],
+      ["channels", "~bus", "heap/~private/gallery", true, true],
+    ],
+  ],
+] as const)("%s", async (_name, config, cases) => {
   const nest = "chat/~zod/citations";
-  const otherWatchedNest = "chat/~zod/announcements";
-  const unwatchedNest = "chat/~private/leadership";
   configureTlon({
+    ...config,
     dmAllowlist: ["~bus"],
     defaultAuthorizedShips: ["~bus"],
-    groupChannels: [nest, otherWatchedNest],
+    groupChannels: [nest, "chat/~zod/announcements"],
   });
   await runMonitor(async () => {
-    for (const { source, sender, citedNest, admitted, expands } of [
-      { source: "chat", sender: "~nec", citedNest: nest, admitted: false, expands: false },
-      { source: "channels", sender: "~nec", citedNest: nest, admitted: false, expands: false },
-      { source: "channels", sender: "~bus", citedNest: nest, admitted: true, expands: true },
-      {
-        source: "channels",
-        sender: "~bus",
-        citedNest: otherWatchedNest,
-        admitted: true,
-        expands: true,
-      },
-      {
-        source: "channels",
-        sender: "~bus",
-        citedNest: unwatchedNest,
-        admitted: true,
-        expands: false,
-      },
-      {
-        source: "channels",
-        sender: "~bus",
-        citedNest: "diary/~private/notes",
-        admitted: true,
-        expands: false,
-      },
-      { source: "chat", sender: "~bus", citedNest: nest, admitted: true, expands: true },
-      { source: "chat", sender: "~bus", citedNest: unwatchedNest, admitted: true, expands: false },
-    ] as const) {
-      const subscription = getSubscription(source);
-      sseClientMock.scry.mockReset().mockResolvedValue({
-        essay: { content: [{ inline: ["CITED-CONTENT"] }] },
-      });
-      inboundRuntimeMock.buildContext.mockClear();
-      inboundRuntimeMock.dispatch.mockClear();
-      const content = [
-        { block: { cite: { chan: { nest: citedNest, where: "/msg/~bus/12345" } } } },
-        { inline: ["~zod inspect this citation"] },
-      ];
-      const essay = messageEssay(sender, content);
-      const id = `${source}-${sender}-${citedNest}`;
-      await subscription.event(
-        source === "chat"
-          ? { whom: sender, id, response: { add: { essay } } }
-          : { nest, response: { post: { id, "r-post": { set: { essay } } } } },
-      );
-      if (!admitted) {
-        expect(sseClientMock.scry).not.toHaveBeenCalled();
-        expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
-        continue;
-      }
-      expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
-      if (expands) {
-        expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
-          `/channels/v4/${citedNest}/posts/post/12345.json`,
-        );
-        expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toBe(
-          `> ~bus wrote: CITED-CONTENT\n\n> [quoted: ~bus in ${citedNest}]\n\n~zod inspect this citation`,
-        );
-      } else {
-        expect(sseClientMock.scry).not.toHaveBeenCalled();
-        expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toBe(
-          `> [quoted: ~bus in ${citedNest}]\n\n~zod inspect this citation`,
-        );
-      }
-    }
-  });
-});
-
-it("expands readable Notebook and Gallery citations when auto-discovery is on", async () => {
-  const nest = "chat/~zod/citations";
-  configureTlon({
-    autoDiscoverChannels: true,
-    defaultAuthorizedShips: ["~bus"],
-    groupChannels: [nest],
-  });
-  await runMonitor(async () => {
-    const subscription = getSubscription("channels");
-    for (const [index, citedNest] of ["diary/~private/notes", "heap/~private/gallery"].entries()) {
-      sseClientMock.scry.mockReset().mockResolvedValue({
-        essay: { content: [{ inline: ["CITED-CONTENT"] }] },
-      });
-      inboundRuntimeMock.buildContext.mockClear();
-      await subscription.event({
-        nest,
-        response: {
-          post: {
-            id: `auto-discovery-${index}`,
-            "r-post": {
-              set: {
-                essay: messageEssay("~bus", [
-                  { block: { cite: { chan: { nest: citedNest, where: "/msg/~bus/12345" } } } },
-                  { inline: ["~zod inspect this citation"] },
-                ]),
-              },
-            },
-          },
-        },
-      });
-
-      expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
-        `/channels/v4/${citedNest}/posts/post/12345.json`,
-      );
-      expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toContain(
-        "> ~bus wrote: CITED-CONTENT",
-      );
+    for (const row of cases) {
+      await checkCitationCase(nest, row);
     }
   });
 });

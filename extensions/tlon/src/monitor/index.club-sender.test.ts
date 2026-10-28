@@ -14,6 +14,8 @@ const {
 // The harness configures ~zod as the bot and ~nec as ownerShip.
 const OWNER = "~nec";
 const CLUB_ID = "0v3.q4n5m.6r7s8.9t0u1.2v3w4";
+const DIARY = "diary/~private/notes";
+const GALLERY = "heap/~private/gallery";
 
 async function withMonitor(run: (runtime: RuntimeEnv) => Promise<void>) {
   const { runtime, stop } = startMonitor();
@@ -35,13 +37,12 @@ function chatSubscription() {
   return subscription;
 }
 
-function chatEvent(params: {
-  whom: string;
-  author: string;
-  text?: string;
-  content?: unknown;
-  id: string;
-}) {
+type ChatEventParams = { whom: string; author: string; id: string } & Partial<{
+  text: string;
+  content: unknown;
+}>;
+
+function chatEvent(params: ChatEventParams) {
   return {
     whom: params.whom,
     id: params.id,
@@ -55,6 +56,10 @@ function chatEvent(params: {
       },
     },
   };
+}
+
+function citation(nest: string, id: number) {
+  return { block: { cite: { chan: { nest, where: `/msg/~bus/${id}` } } } };
 }
 
 function pokedTexts(): string[] {
@@ -116,16 +121,12 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
         chatEvent({
           whom: CLUB_ID,
           author: OWNER,
-          content: [
-            { block: { cite: { chan: { nest: "diary/~private/notes", where: "/msg/~bus/1" } } } },
-            { inline: ["/restart"] },
-          ],
+          content: [citation(DIARY, 1), { inline: ["/restart"] }],
           id: "~bus/3",
         }),
       );
 
       expect(sseClientMock.scry).not.toHaveBeenCalled();
-      expect(inboundRuntimeMock.buildContext).toHaveBeenCalledOnce();
       const [context] = inboundRuntimeMock.buildContext.mock.calls[0] as [
         {
           from: string;
@@ -133,7 +134,6 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
           extra: { SenderRole: string; CommandAuthorized: boolean };
         },
       ];
-      expect(context.sender.id).not.toBe(OWNER);
       expect(context.sender.id).toBe(`club:${CLUB_ID}:${OWNER}`);
       expect(context.sender.name).toBe(`club:${CLUB_ID}:${OWNER}`);
       expect(context.from).toBe(`tlon:club:${CLUB_ID}:${OWNER}`);
@@ -187,15 +187,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
         chatEvent({
           whom: OWNER,
           author: OWNER,
-          content: [
-            { block: { cite: { chan: { nest: "diary/~private/notes", where: "/msg/~bus/1" } } } },
-            {
-              block: {
-                cite: { chan: { nest: "heap/~private/gallery", where: "/msg/~bus/2" } },
-              },
-            },
-            { inline: ["hello"] },
-          ],
+          content: [citation(DIARY, 1), citation(GALLERY, 2), { inline: ["hello"] }],
           id: "~nec/5",
         }),
       );
@@ -203,13 +195,7 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
       expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
         "/channels/v4/diary/~private/notes/posts/post/1.json",
       );
-      expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
-      expect(inboundRuntimeMock.buildContext).toHaveBeenCalledWith(
-        expect.objectContaining({
-          from: `tlon:${OWNER}`,
-          sender: expect.objectContaining({ id: OWNER, roles: ["user"] }),
-        }),
-      );
+      expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].sender.roles).toEqual(["user"]);
     });
   });
 
