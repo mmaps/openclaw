@@ -64,7 +64,7 @@ export async function resolveTlonCitations(
       continue;
     }
     if (!canExpandNest(nest)) {
-      runtime.log?.("[tlon] Skipping cited post: citation is outside watched channels");
+      runtime.log?.("[tlon] Skipping cited post: citation is outside explicit channel scope");
       continue;
     }
     const scryPath = buildCitedPostScryPath(nest, postId);

@@ -464,7 +464,6 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
             notice: `[tlon ${unavailableMediaCount > 1 ? `${unavailableMediaCount} attachments` : "attachment"} unavailable]`,
           })
         : commandBody;
-    const tlonConversationId = isGroup ? (channelNest ?? senderShip) : senderShip;
     const ctxPayload = core.channel.inbound.buildContext({
       channel: "tlon",
       accountId: route.accountId,
@@ -479,7 +478,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
       },
       conversation: {
         kind: isGroup ? "group" : "direct",
-        id: tlonConversationId,
+        id: isGroup ? (channelNest ?? senderShip) : senderShip,
         label: fromLabel,
       },
       route: {
@@ -591,9 +590,8 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
           }
         },
         onError: (err, info) => {
-          const dispatchDuration = Date.now() - dispatchStartTime;
           runtime.error?.(
-            `[tlon] ${info.kind} reply failed after ${dispatchDuration}ms: ${String(err)}`,
+            `[tlon] ${info.kind} reply failed after ${Date.now() - dispatchStartTime}ms: ${String(err)}`,
           );
         },
       },
@@ -610,6 +608,8 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
   };
 
   const watchedChannels = new Set<string>(groupChannels);
+  const canExpandCitedNest = (nest: string) =>
+    settingsState.effectiveAutoDiscoverChannels || watchedChannels.has(nest);
 
   const addWatchedChannels = (channels: readonly string[], logPrefix?: string): number => {
     const previousCount = watchedChannels.size;
@@ -769,8 +769,8 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const can = (cited: string) => watchedChannels.has(cited),
-        messageText = (await resolveTlonCitations(content.content, can, api, runtime)) + rawText;
+      const messageText =
+        (await resolveTlonCitations(content.content, canExpandCitedNest, api, runtime)) + rawText;
 
       await processMessage({
         messageId,
@@ -948,7 +948,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
       }
 
       const can = (nest: string) =>
-          (!isClubMessage && isOwner(senderShip)) || watchedChannels.has(nest),
+          (!isClubMessage && isOwner(senderShip)) || canExpandCitedNest(nest),
         agentText = (await resolveTlonCitations(essay.content, can, api, runtime)) + rawText;
       if (ownerDm) {
         runtime.log?.(`[tlon] Processing DM from owner ${senderShip}`);

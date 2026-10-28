@@ -196,7 +196,7 @@ describe("monitorTlonProvider bot-owned thread mention policy", () => {
   });
 });
 
-it("expands citations only from watched channels after sender admission", async () => {
+it("limits citations to explicit channels when auto-discovery is off", async () => {
   const nest = "chat/~zod/citations";
   const otherWatchedNest = "chat/~zod/announcements";
   const unwatchedNest = "chat/~private/leadership";
@@ -270,6 +270,47 @@ it("expands citations only from watched channels after sender admission", async 
           `> [quoted: ~bus in ${citedNest}]\n\n~zod inspect this citation`,
         );
       }
+    }
+  });
+});
+
+it("expands readable Notebook and Gallery citations when auto-discovery is on", async () => {
+  const nest = "chat/~zod/citations";
+  configureTlon({
+    autoDiscoverChannels: true,
+    defaultAuthorizedShips: ["~bus"],
+    groupChannels: [nest],
+  });
+  await runMonitor(async () => {
+    const subscription = getSubscription("channels");
+    for (const [index, citedNest] of ["diary/~private/notes", "heap/~private/gallery"].entries()) {
+      sseClientMock.scry.mockReset().mockResolvedValue({
+        essay: { content: [{ inline: ["CITED-CONTENT"] }] },
+      });
+      inboundRuntimeMock.buildContext.mockClear();
+      await subscription.event({
+        nest,
+        response: {
+          post: {
+            id: `auto-discovery-${index}`,
+            "r-post": {
+              set: {
+                essay: messageEssay("~bus", [
+                  { block: { cite: { chan: { nest: citedNest, where: "/msg/~bus/12345" } } } },
+                  { inline: ["~zod inspect this citation"] },
+                ]),
+              },
+            },
+          },
+        },
+      });
+
+      expect(sseClientMock.scry).toHaveBeenCalledExactlyOnceWith(
+        `/channels/v4/${citedNest}/posts/post/12345.json`,
+      );
+      expect(inboundRuntimeMock.buildContext.mock.calls[0]?.[0].message.rawBody).toContain(
+        "> ~bus wrote: CITED-CONTENT",
+      );
     }
   });
 });
