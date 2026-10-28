@@ -240,24 +240,26 @@ it("fetches and prepends citations only after DM and channel sender admission", 
   });
 });
 
+const ownerNotices = () =>
+  JSON.stringify(
+    sseClientMock.poke.mock.calls.filter(([payload]) => payload.mark === "chat-dm-action"),
+  );
+
+const ownerReply = (id: string, text: string) =>
+  getSubscription("chat").event({
+    whom: "~nec",
+    id,
+    response: { add: { essay: messageEssay("~nec", text) } },
+  });
+
 it("requires an explicit ID before approving a restricted channel mention", async () => {
   const nest = "chat/~host/general";
   configureTlon({ ownerShip: "~nec", groupChannels: [nest] });
-  const ownerNotices = () =>
-    JSON.stringify(
-      sseClientMock.poke.mock.calls.filter(([payload]) => payload.mark === "chat-dm-action"),
-    );
   const channelRuleWrites = () =>
     sseClientMock.poke.mock.calls
       .map(([payload]) => payload.json?.["put-entry"])
       .filter((entry) => entry?.["entry-key"] === "channelRules");
   await runMonitor(async () => {
-    const ownerReply = (id: string, text: string) =>
-      getSubscription("chat").event({
-        whom: "~nec",
-        id,
-        response: { add: { essay: messageEssay("~nec", text) } },
-      });
     const essay = messageEssay("~bus", "~zod hi");
     await getSubscription("channels").event({
       nest,
@@ -276,6 +278,30 @@ it("requires an explicit ID before approving a restricted channel mention", asyn
     expect(JSON.parse(String(channelRuleWrites()[0]?.value))).toEqual({
       [nest]: { mode: "restricted", allowedShips: ["~bus"] },
     });
+  });
+});
+
+it("requires an explicit ID before accepting a queued group invite", async () => {
+  configureTlon({ ownerShip: "~nec" });
+  const groupJoins = () =>
+    sseClientMock.poke.mock.calls
+      .map(([payload]) => payload)
+      .filter((payload) => payload.mark === "group-join");
+  await runMonitor(async () => {
+    await getSubscription("groups", "/v1/foreigns").event({
+      "~bus/club": { invites: [{ valid: true, from: "~bus" }] },
+    });
+    const approvalId = ownerNotices().match(/group-\d+-[a-f0-9]+/)?.[0];
+    expect(approvalId).toBeDefined();
+
+    await ownerReply("bare-approve", "approve");
+    expect(ownerNotices()).toContain("Include an approval ID");
+    expect(groupJoins()).toEqual([]);
+
+    await ownerReply("explicit-approve", `approve ${approvalId}`);
+    expect(groupJoins().map((payload) => payload.json)).toEqual([
+      { flag: "~bus/club", "join-all": true },
+    ]);
   });
 });
 
