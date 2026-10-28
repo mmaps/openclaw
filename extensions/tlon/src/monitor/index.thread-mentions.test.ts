@@ -30,7 +30,6 @@ async function runMonitor(run: () => Promise<void>) {
     { accountId: "default", waitForStart: true },
   );
 }
-
 type CitationCase = readonly ["chat" | "channels", string, string, boolean, boolean];
 const citedEssay = { essay: { content: [{ inline: ["CITED-CONTENT"] }] } };
 async function checkCitationCase(sourceNest: string, row: CitationCase) {
@@ -51,7 +50,6 @@ async function checkCitationCase(sourceNest: string, row: CitationCase) {
     expands ? [[`/channels/v4/${cited}/posts/post/12345.json`]] : [],
   );
 }
-
 describe("monitorTlonProvider bot-owned thread mention policy", () => {
   it.each([
     { parallelPost: true, rawReplyId: " reply-stable ", admitted: true },
@@ -216,11 +214,11 @@ describe("monitorTlonProvider bot-owned thread mention policy", () => {
     });
   });
 });
-
 it("applies explicit and automatic citation scopes", async () => {
   const nest = "chat/~zod/citations";
-  for (const autoDiscoverChannels of [false, true]) {
-    const cases: readonly CitationCase[] = autoDiscoverChannels
+  const settingsNest = "chat/~zod/announcements";
+  for (const auto of [false, true]) {
+    const cases: readonly CitationCase[] = auto
       ? [
           ["channels", "~bus", "diary/~private/notes", true, true],
           ["channels", "~bus", "heap/~private/gallery", true, true],
@@ -229,26 +227,30 @@ it("applies explicit and automatic citation scopes", async () => {
           ["chat", "~nec", nest, false, false],
           ["channels", "~nec", nest, false, false],
           ["channels", "~bus", nest, true, true],
-          ["channels", "~bus", "chat/~zod/announcements", true, true],
+          ["channels", "~bus", settingsNest, true, true],
           ["channels", "~bus", "chat/~private/leadership", true, false],
           ["channels", "~bus", "diary/~private/notes", true, false],
           ["chat", "~bus", nest, true, true],
           ["chat", "~bus", "chat/~private/leadership", true, false],
         ];
+    settingsManagerMock.load.mockResolvedValueOnce(auto ? {} : { groupChannels: [settingsNest] });
     configureTlon({
-      autoDiscoverChannels,
+      autoDiscoverChannels: auto,
       dmAllowlist: ["~bus"],
       defaultAuthorizedShips: ["~bus"],
-      groupChannels: [nest, "chat/~zod/announcements"],
+      groupChannels: [nest],
     });
     await runMonitor(async () => {
       for (const row of cases) {
         await checkCitationCase(nest, row);
       }
+      const update = auto ? { autoDiscoverChannels: false } : { groupChannels: [] };
+      settingsManagerMock.startSubscription.mock.calls.at(-1)?.[0](update);
+      const revoked = auto ? "diary/~private/notes" : settingsNest;
+      await checkCitationCase(nest, ["chat", "~bus", revoked, true, false]);
     });
   }
 });
-
 const ownerNotices = () =>
   JSON.stringify(
     sseClientMock.poke.mock.calls.filter(([payload]) => payload.mark === "chat-dm-action"),

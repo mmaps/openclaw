@@ -609,7 +609,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
 
   const watchedChannels = new Set<string>(groupChannels);
   const canExpandCitedNest = (nest: string) =>
-    settingsState.effectiveAutoDiscoverChannels || watchedChannels.has(nest);
+    settingsState.effectiveAutoDiscoverChannels || settingsState.explicitChannels.includes(nest);
 
   const addWatchedChannels = (channels: readonly string[], logPrefix?: string): number => {
     const previousCount = watchedChannels.size;

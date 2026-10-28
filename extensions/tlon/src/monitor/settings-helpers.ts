@@ -76,6 +76,7 @@ export function applyTlonSettingsOverrides(params: {
     effectiveAutoAcceptGroupInvites:
       settings.autoAcceptGroupInvites ?? account.autoAcceptGroupInvites ?? false,
     effectiveGroupInviteAllowlist: settings.groupInviteAllowlist ?? account.groupInviteAllowlist,
+    explicitChannels: mergeUniqueStrings(account.groupChannels, settings.groupChannels),
     effectiveAutoDiscoverChannels:
       settings.autoDiscoverChannels ?? account.autoDiscoverChannels ?? false,
     effectiveOwnerShip,

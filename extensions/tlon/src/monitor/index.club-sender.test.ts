@@ -40,7 +40,6 @@ type ChatEventParams = { whom: string; author: string; id: string } & Partial<{
   text: string;
   content: unknown;
 }>;
-
 async function sendChat(params: ChatEventParams) {
   await chatSubscription().event({
     whom: params.whom,
@@ -48,7 +47,6 @@ async function sendChat(params: ChatEventParams) {
     response: { add: { essay: messageEssay(params.author, params.content ?? params.text ?? "") } },
   });
 }
-
 const citation = (nest: string, id: number) => ({
   block: { cite: { chan: { nest, where: `/msg/~bus/${id}` } } },
 });
