@@ -31,7 +31,10 @@ function truncate(text: string, maxLength: number): string {
 }
 
 function formatApprovalInstructions(id: string): string {
-  return `Reply "approve ${id}", "deny ${id}", or "block ${id}"`;
+  return (
+    `Reply "approve", "deny", or "block" if this is the only pending request. ` +
+    `If multiple are pending, reply "approve ${id}", "deny ${id}", or "block ${id}".`
+  );
 }
 
 export function formatApprovalRequest(approval: PendingApproval): string {
@@ -92,9 +95,13 @@ export function parseApprovalResponse(text: string): ApprovalResponse | null {
 
 export function findPendingApproval(
   pendingApprovals: PendingApproval[],
-  id: string,
+  id?: string,
 ): PendingApproval | undefined {
-  return pendingApprovals.find((a) => a.id === id);
+  return id
+    ? pendingApprovals.find((approval) => approval.id === id)
+    : pendingApprovals.length === 1
+      ? pendingApprovals[0]
+      : undefined;
 }
 
 export function removePendingApproval(

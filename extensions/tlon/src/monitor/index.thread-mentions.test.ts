@@ -252,7 +252,7 @@ const ownerReply = (id: string, text: string) =>
     response: { add: { essay: messageEssay("~nec", text) } },
   });
 
-it("requires an explicit ID before approving a restricted channel mention", async () => {
+it("does not guess which restricted channel mention a bare approval targets", async () => {
   const nest = "chat/~host/general";
   configureTlon({ ownerShip: "~nec", groupChannels: [nest] });
   const channelRuleWrites = () =>
@@ -260,20 +260,31 @@ it("requires an explicit ID before approving a restricted channel mention", asyn
       .map(([payload]) => payload.json?.["put-entry"])
       .filter((entry) => entry?.["entry-key"] === "channelRules");
   await runMonitor(async () => {
-    const essay = messageEssay("~bus", "~zod hi");
-    await getSubscription("channels").event({
+    const subscription = getSubscription("channels");
+    await subscription.event({
       nest,
-      response: { post: { id: "mention", "r-post": { set: { essay } } } },
+      response: {
+        post: { id: "mention-bus", "r-post": { set: { essay: messageEssay("~bus", "~zod hi") } } },
+      },
     });
-    const approvalId = ownerNotices().match(/channel-\d+-[a-f0-9]+/)?.[0];
-    expect(approvalId).toBeDefined();
+    await subscription.event({
+      nest,
+      response: {
+        post: {
+          id: "mention-sampel",
+          "r-post": { set: { essay: messageEssay("~sampel", "~zod hello") } },
+        },
+      },
+    });
+    const approvalIds = [...new Set(ownerNotices().match(/channel-\d+-[a-f0-9]+/g) ?? [])];
+    expect(approvalIds).toHaveLength(2);
 
     await ownerReply("bare-approve", "approve");
-    expect(ownerNotices()).toContain("Include an approval ID");
+    expect(ownerNotices()).toContain("Multiple approvals are pending");
     expect(channelRuleWrites()).toEqual([]);
     expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
 
-    await ownerReply("explicit-approve", `approve ${approvalId}`);
+    await ownerReply("explicit-approve", `approve ${approvalIds[0]}`);
     expect(channelRuleWrites()).toHaveLength(1);
     expect(JSON.parse(String(channelRuleWrites()[0]?.value))).toEqual({
       [nest]: { mode: "restricted", allowedShips: ["~bus"] },
@@ -281,7 +292,7 @@ it("requires an explicit ID before approving a restricted channel mention", asyn
   });
 });
 
-it("requires an explicit ID before accepting a queued group invite", async () => {
+it("does not guess which queued group invite a bare approval targets", async () => {
   configureTlon({ ownerShip: "~nec" });
   const groupJoins = () =>
     sseClientMock.poke.mock.calls
@@ -290,15 +301,16 @@ it("requires an explicit ID before accepting a queued group invite", async () =>
   await runMonitor(async () => {
     await getSubscription("groups", "/v1/foreigns").event({
       "~bus/club": { invites: [{ valid: true, from: "~bus" }] },
+      "~sampel/club": { invites: [{ valid: true, from: "~sampel" }] },
     });
-    const approvalId = ownerNotices().match(/group-\d+-[a-f0-9]+/)?.[0];
-    expect(approvalId).toBeDefined();
+    const approvalIds = [...new Set(ownerNotices().match(/group-\d+-[a-f0-9]+/g) ?? [])];
+    expect(approvalIds).toHaveLength(2);
 
     await ownerReply("bare-approve", "approve");
-    expect(ownerNotices()).toContain("Include an approval ID");
+    expect(ownerNotices()).toContain("Multiple approvals are pending");
     expect(groupJoins()).toEqual([]);
 
-    await ownerReply("explicit-approve", `approve ${approvalId}`);
+    await ownerReply("explicit-approve", `approve ${approvalIds[0]}`);
     expect(groupJoins().map((payload) => payload.json)).toEqual([
       { flag: "~bus/club", "join-all": true },
     ]);

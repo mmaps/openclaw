@@ -90,14 +90,17 @@ describe("formatApprovalRequest decision instructions", () => {
     { type: "dm", requestingShip: "~nec" },
     { type: "channel", requestingShip: "~nec", channelNest: "chat/~nec/general" },
     { type: "group", requestingShip: "~nec", groupFlag: "~nec/test" },
-  ] as const)("requires the request ID for $type decisions", (params) => {
+  ] as const)("explains bare and ID-qualified $type decisions", (params) => {
     cryptoMocks.randomBytes.mockReturnValue(Buffer.from("aabbcc", "hex"));
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_717_171_717_171);
 
     try {
       const message = formatApprovalRequest(createPendingApproval(params));
       const id = `${params.type}-1717171717171-aabbcc`;
-      expect(message).toContain(`Reply "approve ${id}", "deny ${id}", or "block ${id}"`);
+      expect(message).toContain(
+        'Reply "approve", "deny", or "block" if this is the only pending request.',
+      );
+      expect(message).toContain(`"approve ${id}", "deny ${id}", or "block ${id}"`);
     } finally {
       nowSpy.mockRestore();
     }

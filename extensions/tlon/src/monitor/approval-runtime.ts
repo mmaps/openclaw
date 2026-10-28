@@ -218,16 +218,15 @@ export function createTlonApprovalRuntime(params: {
       return false;
     }
 
-    if (!parsed.id) {
-      await sendOwnerNotification(
-        `Include an approval ID with your decision. Reply with approve, deny, or block followed by one of the IDs below.\n\n${formatPendingList(state.pendingApprovals)}`,
-      );
-      return true;
-    }
-
     const approval = findPendingApproval(state.pendingApprovals, parsed.id);
     if (!approval) {
-      await sendOwnerNotification(`No pending approval found for ID: ${parsed.id}`);
+      await sendOwnerNotification(
+        parsed.id
+          ? `No pending approval found for ID: ${parsed.id}`
+          : state.pendingApprovals.length > 1
+            ? `Multiple approvals are pending. Include an approval ID with your decision.\n\n${formatPendingList(state.pendingApprovals)}`
+            : "No pending approval found.",
+      );
       return true;
     }
 
