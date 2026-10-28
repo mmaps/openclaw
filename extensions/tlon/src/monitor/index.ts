@@ -902,14 +902,13 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const messageText = rawText;
       const ownerDm = !isClubMessage && isOwner(senderShip);
-      if (ownerDm && (await handleApprovalResponse(messageText))) {
+      if (ownerDm && (await handleApprovalResponse(rawText))) {
         runtime.log?.("[tlon] Processed approval response from owner");
         return;
       }
 
-      if (ownerDm && (await handleAdminCommand(messageText))) {
+      if (ownerDm && (await handleAdminCommand(rawText))) {
         runtime.log?.("[tlon] Processed admin command from owner");
         return;
       }
@@ -927,7 +926,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
           const approval = createPendingApproval({
             type: "dm",
             requestingShip: senderShip,
-            messagePreview: messageText,
+            messagePreview: rawText,
             ...(isClubMessage ? { clubId } : { verifiedDirect: true }),
             // Never store a club message claiming the owner for replay, even as a non-owner.
             ...(isClubMessage && isOwner(senderShip)
@@ -935,7 +934,7 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
               : {
                   originalMessage: {
                     messageId,
-                    messageText,
+                    messageText: rawText,
                     messageContent: essay.content,
                     timestamp: asFiniteNumber(essay?.sent) ?? Date.now(),
                   },
@@ -948,7 +947,8 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
         return;
       }
 
-      const can = (nest: string) => (!clubId && isOwner(senderShip)) || watchedChannels.has(nest),
+      const can = (nest: string) =>
+          (!isClubMessage && isOwner(senderShip)) || watchedChannels.has(nest),
         agentText = (await resolveTlonCitations(essay.content, can, api, runtime)) + rawText;
       if (ownerDm) {
         runtime.log?.(`[tlon] Processing DM from owner ${senderShip}`);

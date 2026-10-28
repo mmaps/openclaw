@@ -159,6 +159,23 @@ describe("monitorTlonProvider club (group DM) sender identity", () => {
     });
   });
 
+  it("still treats the owner's 1:1 DM as the owner", async () => {
+    startMonitorDefaults();
+    await withMonitor(async () => {
+      await chatSubscription().event(
+        chatEvent({ whom: OWNER, author: OWNER, text: "hello", id: "~nec/5" }),
+      );
+
+      expect(inboundRuntimeMock.dispatch).toHaveBeenCalledOnce();
+      expect(inboundRuntimeMock.buildContext).toHaveBeenCalledWith(
+        expect.objectContaining({
+          from: `tlon:${OWNER}`,
+          sender: expect.objectContaining({ id: OWNER, roles: ["owner"] }),
+        }),
+      );
+    });
+  });
+
   it("rechecks owner citation access between reads in the owner's 1:1 DM", async () => {
     startMonitorDefaults();
     await withMonitor(async () => {
