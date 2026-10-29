@@ -44,6 +44,22 @@ function buildCitedPostScryPath(nest: string, postId: string): string | null {
   return scryPath;
 }
 
+/**
+ * Auto-discovery admits any channel the bot ship can read; otherwise only explicit channels.
+ * With cross-channel citations off, the cited channel must also be the one posted in.
+ */
+export function isCitedNestInScope(
+  nest: string,
+  scope: { effectiveAutoDiscoverChannels: boolean; explicitChannels: readonly string[] },
+  crossChannel: boolean,
+  sourceNest?: string,
+): boolean {
+  return (
+    (crossChannel || nest === sourceNest) &&
+    (scope.effectiveAutoDiscoverChannels || scope.explicitChannels.includes(nest))
+  );
+}
+
 export async function resolveTlonCitations(
   content: unknown,
   canExpandNest: (nest: string) => boolean,
