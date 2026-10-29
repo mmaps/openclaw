@@ -15,7 +15,7 @@ const CITE_PATH_SEGMENT_RE = /^[A-Za-z0-9._~-]+$/;
 // Only used to normalize the composed path; no request is ever made against it.
 const CITE_PATH_NORMALIZATION_BASE = "https://tlon.invalid";
 const CITATION_SCOPE_SKIP_LOG =
-  "[tlon] Skipping cited post: citation is outside explicit channel scope";
+  "[tlon] Skipping cited post: citation is outside the configured citation scope";
 
 class CitationScopeChangedError extends Error {}
 
