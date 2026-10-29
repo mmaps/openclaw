@@ -19,8 +19,7 @@ function citedContent(params: { nest?: string; postId: string }): unknown {
     { inline: ["~bot-ship please summarize this"] },
   ];
 }
-
-function makeResolver(canExpandNest: (nest: string) => boolean = () => true) {
+function makeResolver() {
   // Typed parameter so the recorded call captures the exact composed scry path.
   const scry = vi.fn(async (_path: string) => ({
     essay: { content: [{ inline: ["PRIVATE-CONTENT"] }] },
@@ -28,10 +27,9 @@ function makeResolver(canExpandNest: (nest: string) => boolean = () => true) {
   const runtime = { log: vi.fn() } as unknown as RuntimeEnv;
   return {
     scry,
-    resolve: (content: unknown) => resolveTlonCitations(content, canExpandNest, { scry }, runtime),
+    resolve: (content: unknown) => resolveTlonCitations(content, () => true, { scry }, runtime),
   };
 }
-
 describe("Tlon citation scry path composition", () => {
   it("resolves a valid channel post inside the channel-post namespace", async () => {
     const { scry, resolve } = makeResolver(),
@@ -41,7 +39,6 @@ describe("Tlon citation scry path composition", () => {
     expect(scry.mock.calls[0]?.[0]).toBe(`/channels/v4/${NEST}/posts/post/${postId}.json`);
     expect(resolved).toContain("> ~attacker-ship wrote: PRIVATE-CONTENT");
   });
-
   it.each([
     ["raw traversal", `${"../".repeat(7)}storage/credentials`],
     ["single dot segment", "."],
@@ -51,7 +48,6 @@ describe("Tlon citation scry path composition", () => {
     expect(scry).not.toHaveBeenCalled();
     expect(resolved).toBe("");
   });
-
   it.each([
     ["encoded traversal in the nest", "chat/%2e%2e/%2e%2e"],
     ["short nest", "chat/~public"],
@@ -61,7 +57,6 @@ describe("Tlon citation scry path composition", () => {
     expect(scry).not.toHaveBeenCalled();
     expect(resolved).toBe("");
   });
-
   it("makes no authenticated request for a malformed citation", async () => {
     const { scry, resolve } = makeResolver();
     const resolved = await resolve([
