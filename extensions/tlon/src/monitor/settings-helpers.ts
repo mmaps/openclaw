@@ -88,3 +88,19 @@ export function applyTlonSettingsOverrides(params: {
 export function mergeUniqueStrings(base: string[], next?: string[]): string[] {
   return uniqueStrings([...base, ...(next ?? [])]);
 }
+
+export function createTlonSettingsInstaller(
+  state: ReturnType<typeof applyTlonSettingsOverrides>,
+  account: TlonResolvedAccount,
+  log?: (message: string) => void,
+) {
+  return (currentSettings: TlonSettingsStore, preserveApprovalState = false) => {
+    const pendingApprovals = state.pendingApprovals;
+    const effectiveDmAllowlist = state.effectiveDmAllowlist;
+    Object.assign(state, applyTlonSettingsOverrides({ account, currentSettings, log }));
+    if (preserveApprovalState) {
+      state.pendingApprovals = pendingApprovals;
+      state.effectiveDmAllowlist = effectiveDmAllowlist;
+    }
+  };
+}

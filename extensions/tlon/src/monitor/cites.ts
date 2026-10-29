@@ -14,6 +14,10 @@ const CITE_PATH_SEGMENT_RE = /^[A-Za-z0-9._~-]+$/;
 
 // Only used to normalize the composed path; no request is ever made against it.
 const CITE_PATH_NORMALIZATION_BASE = "https://tlon.invalid";
+const CITATION_SCOPE_SKIP_LOG =
+  "[tlon] Skipping cited post: citation is outside explicit channel scope";
+
+class CitationScopeChangedError extends Error {}
 
 function isSafeCitePathSegment(segment: string): boolean {
   if (segment === "." || segment === "..") {
@@ -80,7 +84,7 @@ export async function resolveTlonCitations(
       continue;
     }
     if (!canExpandNest(nest)) {
-      runtime.log?.("[tlon] Skipping cited post: citation is outside explicit channel scope");
+      runtime.log?.(CITATION_SCOPE_SKIP_LOG);
       continue;
     }
     const scryPath = buildCitedPostScryPath(nest, postId);
@@ -90,13 +94,27 @@ export async function resolveTlonCitations(
     }
     try {
       runtime.log?.(`[tlon] Fetching cited post: ${scryPath}`);
-      const data = asRecord(await api.scry(scryPath));
+      const data = asRecord(
+        await api.scry(scryPath, () => {
+          if (!canExpandNest(nest)) {
+            throw new CitationScopeChangedError();
+          }
+        }),
+      );
+      if (!canExpandNest(nest)) {
+        runtime.log?.(CITATION_SCOPE_SKIP_LOG);
+        continue;
+      }
       const essay = asRecord(data?.essay);
       const text = essay?.content ? extractMessageText(essay.content) : "";
       if (text) {
         resolved.push(`> ${whereMatch?.[1] || "unknown"} wrote: ${text}`);
       }
     } catch (err) {
+      if (err instanceof CitationScopeChangedError) {
+        runtime.log?.(CITATION_SCOPE_SKIP_LOG);
+        continue;
+      }
       runtime.log?.(`[tlon] Failed to fetch cited post: ${String(err)}`);
     }
   }

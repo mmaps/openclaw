@@ -43,7 +43,7 @@ async function checkCitationCase(sourceNest: string, row: CitationCase) {
       : { nest: sourceNest, response: { post: { id: cited, "r-post": { set: { essay } } } } },
   );
   expect(inboundRuntimeMock.dispatch).toHaveBeenCalledTimes(admitted ? 1 : 0);
-  expect(sseClientMock.scry.mock.calls).toEqual(
+  expect(sseClientMock.scry.mock.calls.map(([path]) => [path])).toEqual(
     expands ? [[`/channels/v4/${cited}/posts/post/12345.json`]] : [],
   );
   if (expands) {

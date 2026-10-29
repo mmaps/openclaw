@@ -50,6 +50,7 @@ import { prepareTlonGroupAdmission } from "./mentions.js";
 import {
   applyTlonSettingsOverrides,
   buildTlonSettingsMigrations,
+  createTlonSettingsInstaller,
   mergeUniqueStrings,
   shouldMigrateTlonSetting,
 } from "./settings-helpers.js";
@@ -168,15 +169,9 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
   });
 
   const settingsState = applyTlonSettingsOverrides({ account, currentSettings: {} });
-  const installSettings = (currentSettings: typeof settingsState.currentSettings) =>
-    Object.assign(
-      settingsState,
-      applyTlonSettingsOverrides({
-        account,
-        currentSettings,
-        log: (message) => runtime.log?.(message),
-      }),
-    );
+  const installSettings = createTlonSettingsInstaller(settingsState, account, (message) =>
+    runtime.log?.(message),
+  );
 
   // Track recent threads we've participated in so replies can omit a mention.
   const participatedThreads = createParticipatedThreadTracker();
@@ -1093,9 +1088,8 @@ export async function monitorTlonProvider(opts: MonitorTlonOpts): Promise<void> 
             }
             const updatedChannels = mergeUniqueStrings(currentChannels, unpersistedChannels);
             await putTlonSetting(api, "groupChannels", updatedChannels);
-            // The subscription snapshot lags its poke, so keep back-to-back facts cumulative.
             if (settingsState.currentSettings === settingsSnapshot) {
-              installSettings({ ...settingsSnapshot, groupChannels: updatedChannels });
+              installSettings({ ...settingsSnapshot, groupChannels: updatedChannels }, true);
             }
             runtime.log?.(`[tlon] Persisted ${unpersistedChannels.join(", ")} to settings store`);
           } catch (error: unknown) {
