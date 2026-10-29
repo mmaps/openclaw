@@ -1,7 +1,6 @@
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { messageEssay, useTlonMonitorFixture } from "./monitor.test-harness.js";
-
 const {
   configureTlon,
   withMonitor,
@@ -12,7 +11,6 @@ const {
   inboundRuntimeMock,
   settingsManagerMock,
 } = useTlonMonitorFixture();
-
 beforeEach(() => {
   vi.useFakeTimers();
   authenticateMock.mockResolvedValueOnce("urbauth-~zod=proof");
@@ -20,7 +18,6 @@ beforeEach(() => {
   ingressMock.receive.mockResolvedValue({ kind: "ignored" });
   sseClientMock.scry.mockReset().mockResolvedValue({});
 });
-
 async function runMonitor(run: () => Promise<void>) {
   await withMonitor(
     async (runtime) => {
@@ -49,6 +46,11 @@ async function checkCitationCase(sourceNest: string, row: CitationCase) {
   expect(sseClientMock.scry.mock.calls).toEqual(
     expands ? [[`/channels/v4/${cited}/posts/post/12345.json`]] : [],
   );
+  if (expands) {
+    expect(inboundRuntimeMock.buildContext.mock.calls.at(-1)?.[0].message.rawBody).toContain(
+      "CITED-CONTENT",
+    );
+  }
 }
 describe("monitorTlonProvider bot-owned thread mention policy", () => {
   it.each([
@@ -228,6 +230,7 @@ it("applies explicit and automatic citation scopes", async () => {
           ["channels", "~nec", nest, false, false],
           ["channels", "~bus", nest, true, true],
           ["channels", "~bus", settingsNest, true, true],
+          ["chat", "~bus", "chat/~zod/new", true, true],
           ["channels", "~bus", "chat/~private/leadership", true, false],
           ["channels", "~bus", "diary/~private/notes", true, false],
           ["chat", "~bus", nest, true, true],
@@ -236,16 +239,23 @@ it("applies explicit and automatic citation scopes", async () => {
     settingsManagerMock.load.mockResolvedValueOnce(auto ? {} : { groupChannels: [settingsNest] });
     configureTlon({
       autoDiscoverChannels: auto,
+      autoAcceptGroupInvites: true,
       dmAllowlist: ["~bus"],
       defaultAuthorizedShips: ["~bus"],
       groupChannels: [nest],
     });
     await runMonitor(async () => {
+      if (!auto) {
+        await getSubscription("groups", "/groups/ui").event({ channels: { "chat/~zod/new": {} } });
+      }
       for (const row of cases) {
         await checkCitationCase(nest, row);
       }
       const update = auto ? { autoDiscoverChannels: false } : { groupChannels: [] };
-      settingsManagerMock.startSubscription.mock.calls.at(-1)?.[0](update);
+      sseClientMock.poke.mockImplementationOnce(async () => {
+        settingsManagerMock.startSubscription.mock.calls.at(-1)?.[0](update);
+      });
+      await getSubscription("groups", "/groups/ui").event({ channels: { "chat/~zod/race": {} } });
       const revoked = auto ? "diary/~private/notes" : settingsNest;
       await checkCitationCase(nest, ["chat", "~bus", revoked, true, false]);
     });
@@ -255,14 +265,12 @@ const ownerNotices = () =>
   JSON.stringify(
     sseClientMock.poke.mock.calls.filter(([payload]) => payload.mark === "chat-dm-action"),
   );
-
 const ownerReply = (id: string, text: string) =>
   getSubscription("chat").event({
     whom: "~nec",
     id,
     response: { add: { essay: messageEssay("~nec", text) } },
   });
-
 it("does not guess which restricted channel mention a bare approval targets", async () => {
   const nest = "chat/~host/general";
   configureTlon({ ownerShip: "~nec", groupChannels: [nest] });
@@ -289,12 +297,10 @@ it("does not guess which restricted channel mention a bare approval targets", as
     });
     const approvalIds = [...new Set(ownerNotices().match(/channel-\d+-[a-f0-9]+/g) ?? [])];
     expect(approvalIds).toHaveLength(2);
-
     await ownerReply("bare-approve", "approve");
     expect(ownerNotices()).toContain("Multiple approvals are pending");
     expect(channelRuleWrites()).toEqual([]);
     expect(inboundRuntimeMock.dispatch).not.toHaveBeenCalled();
-
     await ownerReply("explicit-approve", `approve ${approvalIds[0]}`);
     expect(channelRuleWrites()).toHaveLength(1);
     expect(JSON.parse(String(channelRuleWrites()[0]?.value))).toEqual({
@@ -302,7 +308,6 @@ it("does not guess which restricted channel mention a bare approval targets", as
     });
   });
 });
-
 it("does not guess which queued group invite a bare approval targets", async () => {
   configureTlon({ ownerShip: "~nec" });
   const groupJoins = () =>
