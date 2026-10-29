@@ -50,7 +50,7 @@ describe("Tlon citation scry path composition", () => {
       beforeRequest?.();
       requests += 1;
       allowed = false;
-      return {};
+      return { essay: { content: [{ inline: ["PRIVATE-CONTENT"] }] } };
     });
     const runtime = { log: vi.fn() } as unknown as RuntimeEnv;
     const resolved = await resolveTlonCitations(
