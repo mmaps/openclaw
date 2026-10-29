@@ -39,6 +39,35 @@ describe("Tlon citation scry path composition", () => {
     expect(scry.mock.calls[0]?.[0]).toBe(`/channels/v4/${NEST}/posts/post/${postId}.json`);
     expect(resolved).toContain("> ~attacker-ship wrote: PRIVATE-CONTENT");
   });
+  it("rechecks citation scope at the authenticated request boundary", async () => {
+    let allowed = true;
+    let requests = 0;
+    let revokeBeforeRequest = true;
+    const scry = vi.fn(async (_path: string, beforeRequest?: () => void) => {
+      if (revokeBeforeRequest) {
+        allowed = false;
+      }
+      beforeRequest?.();
+      requests += 1;
+      allowed = false;
+      return {};
+    });
+    const runtime = { log: vi.fn() } as unknown as RuntimeEnv;
+    const resolved = await resolveTlonCitations(
+      citedContent({ postId: "12345" }),
+      () => allowed,
+      { scry },
+      runtime,
+    );
+    expect(requests).toBe(0);
+    expect(resolved).toBe("");
+    allowed = true;
+    revokeBeforeRequest = false;
+    await expect(
+      resolveTlonCitations(citedContent({ postId: "12345" }), () => allowed, { scry }, runtime),
+    ).resolves.toBe("");
+    expect(requests).toBe(1);
+  });
   it.each([
     ["raw traversal", `${"../".repeat(7)}storage/credentials`],
     ["single dot segment", "."],
