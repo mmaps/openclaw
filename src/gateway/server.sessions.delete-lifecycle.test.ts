@@ -23,6 +23,7 @@ import { replaceTranscriptEvents } from "../config/sessions/session-accessor.sql
 import { memorySessionActorOwners } from "../config/sessions/session-actor-memory-owner.js";
 import { acquireSessionActorStorage } from "../config/sessions/session-actor-storage-acquisition.js";
 import type { SessionEntry } from "../config/sessions/types.js";
+import type { CronJob, CronStoredJob } from "../cron/types.js";
 import { readAttachedSessionEndTranscriptSourceForTest } from "../plugins/session-end-transcript.test-support.js";
 import { withSessionTurn } from "../sessions/session-controller.admission.js";
 import {
@@ -214,6 +215,51 @@ test("sessions.delete rejects main and aborts active runs", async () => {
     { childSessionKey: key },
   );
   expect(unbind).toHaveBeenCalledExactlyOnceWith({ targetSessionKey: key, reason });
+});
+
+test("sessions.delete disables automations bound to the deleted conversation", async () => {
+  const key = "agent:main:deleted-context";
+  await seedSession(key, "sess-deleted-context");
+  const job: CronStoredJob = {
+    id: "created-here",
+    name: "Created here",
+    enabled: true,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+    schedule: { kind: "at", at: "2027-01-01T00:00:00.000Z" },
+    sessionTarget: "isolated",
+    wakeMode: "now",
+    payload: { kind: "agentTurn", message: "Synthetic reminder" },
+    sourceConversation: { sessionKey: key, sessionId: "sess-deleted-context" },
+    state: {},
+  };
+  const updateWithPrecondition = vi.fn(
+    async (
+      _id: string,
+      patch: { enabled?: boolean },
+      precondition: (currentJob: CronJob, nowMs: number) => void | Promise<void>,
+    ) => {
+      await precondition(job, Date.now());
+      job.enabled = patch.enabled ?? job.enabled;
+      return job;
+    },
+  );
+
+  const deleted = await deleteSession(
+    { key },
+    {
+      context: {
+        cron: {
+          getDefaultAgentId: () => "main",
+          list: async () => [job],
+          updateWithPrecondition,
+        },
+      },
+    },
+  );
+
+  expect(deleted).toMatchObject({ ok: true, payload: { deleted: true } });
+  expect(job.enabled).toBe(false);
 });
 
 test("sessions.delete preserves locked archived sessions and deletes ordinary archived sessions", async () => {

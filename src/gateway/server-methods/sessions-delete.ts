@@ -24,6 +24,7 @@ import { withSessionEntryReadOnlyInWorker } from "../../config/sessions/session-
 import { assertCapturedSessionEntryReadSource } from "../../config/sessions/session-entry-read-source.js";
 import type { CapturedSessionEntryReadSource } from "../../config/sessions/session-entry-read-source.types.js";
 import { resolvePersistedSessionStoreOwnerForKey } from "../../config/sessions/session-store-owner.js";
+import { disableCronJobsBoundToSessions } from "../../cron/job-session-bindings.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { readDatabasePathIdentitySync } from "../../infra/sqlite-worker-identity.js";
 import {
@@ -40,6 +41,7 @@ import {
 } from "../../sessions/session-controller.lifecycle.js";
 import { handleSessionStateSessionDeleted } from "../../sessions/session-state-events.js";
 import { removeSessionWorktree } from "../../sessions/session-worktree-lifecycle.js";
+import { ADMIN_SCOPE } from "../operator-scopes.js";
 import { resolvePluginSessionOwnershipError } from "../session-plugin-ownership.js";
 import { resolveRequestedSessionAgentId as resolveRequestedGlobalAgentId } from "../session-request-agent.js";
 import { invalidSessionRequest } from "../session-request-error.js";
@@ -577,6 +579,29 @@ async function deleteGatewaySessionInScope(
         throw error;
       }
       return { ok: false, error: error.error };
+    }
+    if (
+      deletion.deleted &&
+      (client === null || client.connect.scopes?.includes(ADMIN_SCOPE) === true)
+    ) {
+      try {
+        const disabledJobIds = (
+          await disableCronJobsBoundToSessions({
+            cron: context.cron,
+            cfg,
+            sessionKeys: [target.canonicalKey],
+          })
+        ).get(target.canonicalKey);
+        if (disabledJobIds?.length) {
+          sessionLog.info(
+            `sessions.delete: disabled cron jobs bound to deleted session ${target.canonicalKey}: ${disabledJobIds.join(", ")}`,
+          );
+        }
+      } catch (error) {
+        sessionLog.warn(
+          `sessions.delete: failed to disable cron jobs for deleted session ${target.canonicalKey}: ${formatErrorMessage(error)}`,
+        );
+      }
     }
     const response = publishDeletion(deletion);
     return { ok: true, result: response };

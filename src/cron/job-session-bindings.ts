@@ -122,7 +122,7 @@ class CronJobBindingStaleError extends Error {
   }
 }
 
-/** Disables enabled jobs bound to any archived session with one job-list scan. */
+/** Disables enabled jobs bound to any specified session with one job-list scan. */
 export async function disableCronJobsBoundToSessions(params: {
   cron: Pick<CronServiceContract, "list" | "updateWithPrecondition" | "getDefaultAgentId">;
   cfg: OpenClawConfig;
@@ -176,7 +176,7 @@ export async function disableCronJobsBoundToSessions(params: {
     const subject =
       sessionKeys.length === 1
         ? `bound to ${sessionKeys[0]}`
-        : `bound to ${sessionKeys.length} archived sessions`;
+        : `bound to ${sessionKeys.length} sessions`;
     throw new AggregateError(
       failures,
       `failed to disable ${failures.length} cron job(s) ${subject}`,
