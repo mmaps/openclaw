@@ -136,7 +136,7 @@ async function disable(
       getDefaultAgentId: () => defaultAgentId ?? undefined,
     },
     cfg: {},
-    sessionKeys: [sessionKey],
+    sessions: [{ sessionKey, agentId: "main" }],
   });
   return { disabled: result.disabledBySession.get(sessionKey) ?? [], failures: result.failures };
 }
@@ -207,4 +207,55 @@ test.each([
       ["agent:research:global", "research"],
     ]),
   );
+});
+
+test("scopes cleanup to the binding agent and session incarnation", async () => {
+  const jobs = [
+    job({
+      id: "current",
+      agentId: "ops",
+      sourceConversation: { sessionKey: "global", sessionId: "current-session" },
+    }),
+    job({
+      id: "old-incarnation",
+      agentId: "ops",
+      sourceConversation: { sessionKey: "global", sessionId: "old-session" },
+    }),
+    job({
+      id: "other-agent",
+      agentId: "research",
+      sourceConversation: { sessionKey: "global", sessionId: "current-session" },
+    }),
+    {
+      ...job({
+        id: "owner-current",
+        agentId: "ops",
+        sessionTarget: "main",
+        owner: { agentId: "ops", sessionKey: "global" },
+      }),
+      ownerSessionId: "current-session",
+    },
+    {
+      ...job({
+        id: "owner-old",
+        agentId: "ops",
+        sessionTarget: "main",
+        owner: { agentId: "ops", sessionKey: "global" },
+      }),
+      ownerSessionId: "old-session",
+    },
+  ];
+  const update = fakeUpdateWithPrecondition(() => jobs);
+  const result = await disableCronJobsBoundToSessions({
+    cron: {
+      list: async () => jobs,
+      updateWithPrecondition: update,
+      getDefaultAgentId: () => "main",
+    },
+    cfg: { session: { scope: "global" } },
+    sessions: [{ sessionKey: "global", agentId: "ops", sessionId: "current-session" }],
+  });
+
+  expect(result.disabledBySession.get("global")).toEqual(["current", "owner-current"]);
+  expect(update.mock.calls.map((call) => call[0])).toEqual(["current", "owner-current"]);
 });

@@ -407,6 +407,9 @@ export async function captureCronCreatorSession(
     ...inference,
     ...(operatorSource ? { operatorSource } : {}),
     assertOperatorSourceCurrent: operatorSource ? operatorAuthority?.assertCurrent : undefined,
+    ...(callerScope && creatorSession?.sessionId
+      ? { ownerSessionId: creatorSession.sessionId }
+      : {}),
     ...(sourceConversation ? { sourceConversation } : {}),
     ...(createdActor ? { createdActor } : {}),
     ...(callerScope && creatorSession?.skillLibrarySelections

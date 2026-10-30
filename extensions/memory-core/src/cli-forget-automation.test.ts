@@ -25,6 +25,7 @@ afterEach(() => {
 
 test("memory forget reports bound automation cleanup for resolved sessions", async () => {
   const report = {
+    agentId: "main",
     dryRun: false,
     sessionResolutions: [
       { sessionId: "session-one", sessionKey: "agent:main:one", source: "live" },
@@ -41,7 +42,7 @@ test("memory forget reports bound automation cleanup for resolved sessions", asy
 
   expect(disableLocalCronJobsBoundToSessions).toHaveBeenCalledWith({
     cfg,
-    sessionKeys: ["agent:main:one"],
+    sessions: [{ agentId: "main", sessionId: "session-one", sessionKey: "agent:main:one" }],
   });
   expect(writeJson).toHaveBeenCalledWith({
     ...report,

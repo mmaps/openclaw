@@ -546,7 +546,13 @@ async function deleteGatewaySessionInScope(
                 const cleanup = await disableCronJobsBoundToSessions({
                   cron: context.cron,
                   cfg,
-                  sessionKeys: [deletedSessionKey],
+                  sessions: [
+                    {
+                      sessionKey: deletedSessionKey,
+                      agentId: target.agentId,
+                      ...(result.deletedSessionId ? { sessionId: result.deletedSessionId } : {}),
+                    },
+                  ],
                 });
                 const disabledJobIds = cleanup.disabledBySession.get(deletedSessionKey) ?? [];
                 automationCleanup = { disabledJobIds, failures: cleanup.failures };

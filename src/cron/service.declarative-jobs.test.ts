@@ -230,9 +230,14 @@ it("keeps the first creator across declaration convergence and restart", async (
       ownerProfileId: "profile-ada",
     },
   ];
-  const provenance = { createdActor: { type: "human", id: "profile-ada" }, sourceConversation };
+  const provenance = {
+    createdActor: { type: "human", id: "profile-ada" },
+    ownerSessionId: sourceConversation.sessionId,
+    sourceConversation,
+  };
   const created = await add(writer, declaration({ id: "reserved-id" }), {
     createdActor: { type: "human", source: "profile", id: "profile-ada" },
+    ownerSessionId: sourceConversation.sessionId,
     sourceConversation,
     skillLibrarySelections: selections,
   });
@@ -260,6 +265,7 @@ it("keeps the first creator across declaration convergence and restart", async (
     owner: { agentId: "ops", sessionKey: "agent:ops:main" },
   });
   const job = await storedJob(storePath, created.id);
+  expect(toPublicCronJob(job)).not.toHaveProperty("ownerSessionId");
   expect(toPublicCronJob(job)).not.toHaveProperty("skillLibrarySelections");
   const session = {
     cfg: {},

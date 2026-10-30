@@ -142,6 +142,7 @@ export async function add(
         systemOwned: opts?.systemOwned,
         createdActor: opts?.createdActor,
         inferenceBinding: opts?.inferenceBinding,
+        ownerSessionId: opts?.ownerSessionId,
         sourceConversation: opts?.sourceConversation,
         operatorSource: opts?.operatorSource,
         skillLibrarySelections: opts?.skillLibrarySelections,

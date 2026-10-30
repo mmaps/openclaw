@@ -177,6 +177,9 @@ export function planCronJobMutation(
         if (options.createdActor) {
           nextJob.createdActor = options.createdActor;
         }
+        if (options.ownerSessionId && nextJob.owner?.sessionKey) {
+          nextJob.ownerSessionId = options.ownerSessionId;
+        }
         if (options.sourceConversation) {
           nextJob.sourceConversation = options.sourceConversation;
         }

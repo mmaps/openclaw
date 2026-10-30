@@ -6,6 +6,7 @@ import { getChildLogger, getResolvedLoggerSettings, toPinoLikeLogger } from "../
 import { normalizeAgentId } from "../routing/session-key.js";
 import {
   disableCronJobsBoundToSessions,
+  type CronSessionCleanupIdentity,
   type DisableCronJobsBoundToSessionsResult,
 } from "./job-session-bindings.js";
 import { CronService } from "./service.js";
@@ -56,14 +57,14 @@ export async function withLocalAgentCronJobsRemoved<T>(
 /** Disables jobs for a caller that already owns local OpenClaw state. */
 export async function disableLocalCronJobsBoundToSessions(params: {
   cfg: OpenClawConfig;
-  sessionKeys: readonly string[];
+  sessions: readonly CronSessionCleanupIdentity[];
 }): Promise<DisableCronJobsBoundToSessionsResult> {
   const { scheduler, service } = await createLocalCronService(() => params.cfg);
   try {
     return await disableCronJobsBoundToSessions({
       cron: service,
       cfg: params.cfg,
-      sessionKeys: params.sessionKeys,
+      sessions: params.sessions,
     });
   } finally {
     service.stop();

@@ -90,6 +90,26 @@ export function registerCronCreatorSessionTests(fixture: {
     );
   });
 
+  it("retains the creator incarnation for main-session reminders", async () => {
+    loadGatewaySessionEntry.mockReturnValue({
+      canonicalKey: sourceConversation.sessionKey,
+      entry: { ...sourceConversation, createdActor: creator },
+    });
+    const { options, payload } = await create(
+      agentTurnCronParams({
+        agentId: "ops",
+        sessionKey: "conversation",
+        sessionTarget: "main",
+        payload: { kind: "systemEvent", text: "Synthetic reminder" },
+      }),
+      { client: callerClient("ops", undefined, sourceConversation.sessionKey) },
+    );
+
+    expect(options.ownerSessionId).toBe(sourceConversation.sessionId);
+    expect(options).not.toHaveProperty("sourceConversation");
+    expect(payload).not.toHaveProperty("ownerSessionId");
+  });
+
   it.each([undefined, "missing-conversation"])(
     "leaves isolated jobs unbound without an existing creating session: %s",
     async (sessionKey) => {

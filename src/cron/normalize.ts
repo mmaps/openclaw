@@ -316,6 +316,12 @@ export function normalizeCronJobInput(
       delete next.owner;
     }
   }
+  const ownerSessionId = normalizeOptionalString(base.ownerSessionId);
+  if (ownerSessionId) {
+    next.ownerSessionId = ownerSessionId;
+  } else {
+    delete next.ownerSessionId;
+  }
 
   // Preserve omitted patch fields; each authority owner decides whether an
   // authored value is retained, discarded, or converted to recovery state.

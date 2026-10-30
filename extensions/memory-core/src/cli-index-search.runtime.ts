@@ -194,19 +194,15 @@ export async function runMemoryForget(opts: MemoryForgetCommandOptions) {
       since: opts.since,
       dryRun: Boolean(opts.dryRun),
     });
-    const sessionKeys = [
-      ...new Set(
-        report.sessionResolutions.flatMap(({ sessionKey }) => (sessionKey ? [sessionKey] : [])),
-      ),
-    ];
+    const sessions = report.sessionResolutions.flatMap(({ sessionId, sessionKey }) =>
+      sessionKey ? [{ agentId: report.agentId, sessionId, sessionKey }] : [],
+    );
     const automationCleanup =
-      !report.dryRun && sessionKeys.length > 0
-        ? await disableLocalCronJobsBoundToSessions({ cfg, sessionKeys }).catch(
-            (error: unknown) => ({
-              disabledBySession: new Map<string, string[]>(),
-              failures: [{ jobId: undefined, message: formatErrorMessage(error) }],
-            }),
-          )
+      !report.dryRun && sessions.length > 0
+        ? await disableLocalCronJobsBoundToSessions({ cfg, sessions }).catch((error: unknown) => ({
+            disabledBySession: new Map<string, string[]>(),
+            failures: [{ jobId: undefined, message: formatErrorMessage(error) }],
+          }))
         : undefined;
     const cleanupReport = automationCleanup
       ? {
