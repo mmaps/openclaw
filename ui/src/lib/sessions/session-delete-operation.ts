@@ -102,6 +102,7 @@ function performSessionDelete(
       return {
         deleted: true,
         ...(response.worktreePreserved ? { worktreePreserved: response.worktreePreserved } : {}),
+        ...(response.automationCleanup ? { automationCleanup: response.automationCleanup } : {}),
       };
     } catch (error) {
       if (!host.owns(deletion)) {
@@ -194,6 +195,11 @@ export async function settleSessionDeleteBatch(
         result.deleted.push(...callerTargets.keys());
         if (outcome.worktreePreserved) {
           result.preservedWorktrees.push(outcome.worktreePreserved);
+        }
+        if (outcome.automationCleanup) {
+          const cleanup = (result.automationCleanup ??= { disabledJobIds: [], failures: [] });
+          cleanup.disabledJobIds.push(...outcome.automationCleanup.disabledJobIds);
+          cleanup.failures.push(...outcome.automationCleanup.failures);
         }
       }
     } catch (error) {
