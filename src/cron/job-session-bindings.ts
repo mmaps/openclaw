@@ -14,12 +14,18 @@ type CronJobSessionBinding = Pick<
   | "agentId"
   | "sessionKey"
   | "sessionTarget"
+  | "payloadSourceConversation"
   | "sourceConversation"
   | "owner"
   | "ownerSessionId"
 >;
 
-type PreparedBinding = Omit<CronJobSessionBinding, "sourceConversation" | "owner"> & {
+type PreparedBinding = Omit<
+  CronJobSessionBinding,
+  "payloadSourceConversation" | "sourceConversation" | "owner"
+> & {
+  payloadSourceSessionKey: string | undefined;
+  payloadSourceSessionId: string | undefined;
   sourceSessionKey: string | undefined;
   sourceSessionId: string | undefined;
   ownerAgentId: string | undefined;
@@ -51,6 +57,8 @@ function prepareCronJobSessionBindings(
 ): PreparedBinding {
   const mainKey = opts.cfg.session?.mainKey;
   const scope = opts.cfg.session?.scope;
+  const payloadSourceSessionKey = job.payloadSourceConversation?.sessionKey;
+  const payloadSourceSessionId = job.payloadSourceConversation?.sessionId;
   const sourceSessionKey = job.sourceConversation?.sessionKey;
   const sourceSessionId = job.sourceConversation?.sessionId;
   const ownerAgentId = job.owner?.agentId;
@@ -64,6 +72,8 @@ function prepareCronJobSessionBindings(
       entry.agentId === job.agentId &&
       entry.sessionKey === job.sessionKey &&
       entry.sessionTarget === job.sessionTarget &&
+      entry.payloadSourceSessionKey === payloadSourceSessionKey &&
+      entry.payloadSourceSessionId === payloadSourceSessionId &&
       entry.sourceSessionKey === sourceSessionKey &&
       entry.sourceSessionId === sourceSessionId &&
       entry.ownerAgentId === ownerAgentId &&
@@ -83,6 +93,8 @@ function prepareCronJobSessionBindings(
     agentId: job.agentId,
     sessionKey: job.sessionKey,
     sessionTarget: job.sessionTarget,
+    payloadSourceSessionKey,
+    payloadSourceSessionId,
     sourceSessionKey,
     sourceSessionId,
     ownerAgentId,
@@ -153,6 +165,7 @@ function prepareCronJobSessionBindings(
       add(resolveCronSessionTargetSessionKey(job.sessionTarget));
     }
     add(job.sessionKey);
+    add(job.payloadSourceConversation?.sessionKey, agentId, payloadSourceSessionId);
     add(job.sourceConversation?.sessionKey, agentId, sourceSessionId);
     add(ownerSessionKey, ownerAgentId?.trim() || agentId, job.ownerSessionId);
   } catch {

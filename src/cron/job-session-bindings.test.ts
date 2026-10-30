@@ -102,6 +102,17 @@ test("refreshes binding facts after job edits and agent/session routing changes"
   check(["agent:ops:inbox", "agent:research:replacement"]);
 });
 
+test("refreshes a changed payload-source binding", () => {
+  const definition = job({
+    id: "changing-payload-source",
+    payloadSourceConversation: { sessionKey: "first", sessionId: "first-session" },
+  });
+  const opts = { cfg: {}, defaultAgentId: "ops" };
+  expect([...resolveCronJobSessionBindings(definition, opts).keys()]).toContain("agent:ops:first");
+  definition.payloadSourceConversation = { sessionKey: "second", sessionId: "second-session" };
+  expect([...resolveCronJobSessionBindings(definition, opts).keys()]).toContain("agent:ops:second");
+});
+
 function job(partial: Partial<CronStoredJob> & Pick<CronJob, "id">): CronStoredJob {
   return { enabled: true, sessionTarget: "isolated", ...partial } as CronJob;
 }
@@ -222,6 +233,16 @@ test("scopes cleanup to the binding agent and session incarnation", async () => 
       sourceConversation: { sessionKey: "global", sessionId: "old-session" },
     }),
     job({
+      id: "payload-current",
+      agentId: "ops",
+      payloadSourceConversation: { sessionKey: "global", sessionId: "current-session" },
+    }),
+    job({
+      id: "payload-old",
+      agentId: "ops",
+      payloadSourceConversation: { sessionKey: "global", sessionId: "old-session" },
+    }),
+    job({
       id: "other-agent",
       agentId: "research",
       sourceConversation: { sessionKey: "global", sessionId: "current-session" },
@@ -256,6 +277,14 @@ test("scopes cleanup to the binding agent and session incarnation", async () => 
     sessions: [{ sessionKey: "global", agentId: "ops", sessionId: "current-session" }],
   });
 
-  expect(result.disabledBySession.get("global")).toEqual(["current", "owner-current"]);
-  expect(update.mock.calls.map((call) => call[0])).toEqual(["current", "owner-current"]);
+  expect(result.disabledBySession.get("global")).toEqual([
+    "current",
+    "payload-current",
+    "owner-current",
+  ]);
+  expect(update.mock.calls.map((call) => call[0])).toEqual([
+    "current",
+    "payload-current",
+    "owner-current",
+  ]);
 });

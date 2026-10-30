@@ -333,6 +333,14 @@ export async function captureCronCreatorSession(
           lifecycleRevision: creatorSession.lifecycleRevision,
         }
       : undefined;
+  const payloadSourceConversation =
+    job.payload.kind === "systemEvent" && callerScope && loaded && creatorSession?.sessionId
+      ? {
+          sessionKey: loaded.canonicalKey,
+          sessionId: creatorSession.sessionId,
+          lifecycleRevision: creatorSession.lifecycleRevision,
+        }
+      : undefined;
   // An authenticated operator turn records its device and grant for the job's
   // parent, so every occurrence rechecks them instead of the creator profile.
   const operatorSource =
@@ -410,6 +418,7 @@ export async function captureCronCreatorSession(
     ...(callerScope && creatorSession?.sessionId
       ? { ownerSessionId: creatorSession.sessionId }
       : {}),
+    ...(payloadSourceConversation ? { payloadSourceConversation } : {}),
     ...(sourceConversation ? { sourceConversation } : {}),
     ...(createdActor ? { createdActor } : {}),
     ...(callerScope && creatorSession?.skillLibrarySelections

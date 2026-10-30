@@ -143,6 +143,7 @@ export async function add(
         createdActor: opts?.createdActor,
         inferenceBinding: opts?.inferenceBinding,
         ownerSessionId: opts?.ownerSessionId,
+        payloadSourceConversation: opts?.payloadSourceConversation,
         sourceConversation: opts?.sourceConversation,
         operatorSource: opts?.operatorSource,
         skillLibrarySelections: opts?.skillLibrarySelections,

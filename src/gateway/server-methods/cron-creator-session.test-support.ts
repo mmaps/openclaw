@@ -106,8 +106,10 @@ export function registerCronCreatorSessionTests(fixture: {
     );
 
     expect(options.ownerSessionId).toBe(sourceConversation.sessionId);
+    expect(options.payloadSourceConversation).toEqual(sourceConversation);
     expect(options).not.toHaveProperty("sourceConversation");
     expect(payload).not.toHaveProperty("ownerSessionId");
+    expect(payload).not.toHaveProperty("payloadSourceConversation");
   });
 
   it.each([undefined, "missing-conversation"])(
@@ -143,6 +145,12 @@ export function registerCronCreatorSessionTests(fixture: {
 
   it.each([
     { createdActor: { type: "human", source: "profile", id: "spoofed-profile" } },
+    {
+      payloadSourceConversation: {
+        sessionKey: "agent:main:other",
+        sessionId: "spoofed-session",
+      },
+    },
     { sourceConversation: { sessionKey: "agent:main:other", sessionId: "spoofed-session" } },
     { operatorSource: { source: { profileId: "spoofed-profile" } } },
   ])("rejects caller-supplied private cron creator facts: %j", async (privateFields) => {

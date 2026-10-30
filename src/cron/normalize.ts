@@ -322,6 +322,24 @@ export function normalizeCronJobInput(
   } else {
     delete next.ownerSessionId;
   }
+  if (isRecord(base.payloadSourceConversation)) {
+    const sessionKey = normalizeOptionalString(base.payloadSourceConversation.sessionKey);
+    const sessionId = normalizeOptionalString(base.payloadSourceConversation.sessionId);
+    const lifecycleRevision = normalizeOptionalString(
+      base.payloadSourceConversation.lifecycleRevision,
+    );
+    if (sessionKey && sessionId) {
+      next.payloadSourceConversation = {
+        sessionKey,
+        sessionId,
+        ...(lifecycleRevision ? { lifecycleRevision } : {}),
+      };
+    } else {
+      delete next.payloadSourceConversation;
+    }
+  } else {
+    delete next.payloadSourceConversation;
+  }
 
   // Preserve omitted patch fields; each authority owner decides whether an
   // authored value is retained, discarded, or converted to recovery state.
