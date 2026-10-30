@@ -226,24 +226,24 @@ test("sessions.delete reports bound automation cleanup for both authorized delet
     [adminKey, "sess-admin"],
     [unrelatedKey, "sess-other"],
   );
-  const job = (id: string, sessionKey: string, sessionId: string): CronStoredJob => ({
+  const job = (id: string, sessionKey: string): CronStoredJob => ({
     id,
     name: id,
     enabled: true,
     createdAtMs: 1,
     updatedAtMs: 1,
     schedule: { kind: "at", at: "2027-01-01T00:00:00.000Z" },
-    sessionTarget: "isolated",
+    sessionTarget: "main",
     wakeMode: "now",
-    payload: { kind: "agentTurn", message: "Synthetic reminder" },
-    sourceConversation: { sessionKey, sessionId },
+    payload: { kind: "systemEvent", text: "Synthetic reminder with copied context" },
+    owner: { agentId: "main", sessionKey },
     state: {},
   });
   const jobs = [
-    job("archived-bound", archivedKey, "sess-archived"),
-    job("admin-bound", adminKey, "sess-admin"),
-    job("fails", adminKey, "sess-admin"),
-    job("unrelated", unrelatedKey, "sess-other"),
+    job("archived-bound", archivedKey),
+    job("admin-bound", adminKey),
+    job("fails", adminKey),
+    job("unrelated", unrelatedKey),
   ];
   const updateWithPrecondition = vi.fn(
     async (

@@ -94,6 +94,12 @@ test("refreshes binding facts after job edits and agent/session routing changes"
   check(["agent:ops:cron:replaced"]);
   definition.sessionTarget = "session: ";
   check([]);
+  delete cfg.session!.scope;
+  definition.sessionTarget = "main";
+  definition.owner = { agentId: "ops", sessionKey: "creator" };
+  check(["agent:ops:inbox", "agent:ops:creator"]);
+  definition.owner = { agentId: "research", sessionKey: "replacement" };
+  check(["agent:ops:inbox", "agent:research:replacement"]);
 });
 
 function job(partial: Partial<CronStoredJob> & Pick<CronJob, "id">): CronStoredJob {
@@ -140,7 +146,9 @@ test("disables only enabled jobs bound to the archived session", async () => {
     job({ id: "bound" }),
     job({
       id: "created-here",
-      sourceConversation: { sessionKey: "agent:main:cron:bound", sessionId: "creator" },
+      sessionTarget: "main",
+      payload: { kind: "systemEvent", text: "Synthetic reminder with copied context" },
+      owner: { agentId: "main", sessionKey: "agent:main:cron:bound" },
     }),
     job({ id: "other", sessionTarget: "session:agent:main:other" }),
     job({ id: "already-off", enabled: false, sessionKey: "cron:bound" }),

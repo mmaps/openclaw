@@ -1,7 +1,7 @@
 /** Maps cron jobs to the physical conversations they are bound to. */
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { formatErrorMessage } from "../infra/errors.js";
-import { parseAgentSessionKey } from "../routing/session-key.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
 import { tryResolveCronJobEffectiveAgentId } from "./agent-id.js";
 import { resolveCronAgentSessionKey } from "./isolated-agent/session-key.js";
 import type { CronServiceContract } from "./service-contract.js";
@@ -10,11 +10,13 @@ import type { CronJob, CronStoredJob } from "./types.js";
 
 type CronJobSessionBinding = Pick<
   CronStoredJob,
-  "id" | "agentId" | "sessionKey" | "sessionTarget" | "sourceConversation"
+  "id" | "agentId" | "sessionKey" | "sessionTarget" | "sourceConversation" | "owner"
 >;
 
-type PreparedBinding = Omit<CronJobSessionBinding, "sourceConversation"> & {
+type PreparedBinding = Omit<CronJobSessionBinding, "sourceConversation" | "owner"> & {
   sourceSessionKey: string | undefined;
+  ownerAgentId: string | undefined;
+  ownerSessionKey: string | undefined;
   defaultAgentId: string | undefined;
   mainKey: string | undefined;
   scope: NonNullable<OpenClawConfig["session"]>["scope"];
@@ -25,8 +27,9 @@ const preparedBindings = new WeakMap<CronJobSessionBinding, PreparedBinding[]>()
 /**
  * Maps each canonical session key to its owning agent: the session the run
  * joins (main/isolated/session:<key>) plus the explicit wake/delivery lane in
- * job.sessionKey and the creating conversation. Keys compare equal to physical
- * Gateway session-store rows; values retain ownership when the key is unqualified.
+ * job.sessionKey and the creating conversation retained by source or owner.
+ * Keys compare equal to physical Gateway session-store rows; values retain
+ * ownership when the key is unqualified.
  */
 export function resolveCronJobSessionBindings(
   job: CronJobSessionBinding,
@@ -35,6 +38,8 @@ export function resolveCronJobSessionBindings(
   const mainKey = opts.cfg.session?.mainKey;
   const scope = opts.cfg.session?.scope;
   const sourceSessionKey = job.sourceConversation?.sessionKey;
+  const ownerAgentId = job.owner?.agentId;
+  const ownerSessionKey = job.owner?.sessionKey;
   const prepared = preparedBindings.get(job);
   // These scalar facts are the binding revision, including in-place edits.
   // Keep separate bounded slots for interleaved callers with different routing.
@@ -45,6 +50,8 @@ export function resolveCronJobSessionBindings(
       entry.sessionKey === job.sessionKey &&
       entry.sessionTarget === job.sessionTarget &&
       entry.sourceSessionKey === sourceSessionKey &&
+      entry.ownerAgentId === ownerAgentId &&
+      entry.ownerSessionKey === ownerSessionKey &&
       entry.defaultAgentId === opts.defaultAgentId &&
       entry.mainKey === mainKey &&
       entry.scope === scope
@@ -59,6 +66,8 @@ export function resolveCronJobSessionBindings(
     sessionKey: job.sessionKey,
     sessionTarget: job.sessionTarget,
     sourceSessionKey,
+    ownerAgentId,
+    ownerSessionKey,
     defaultAgentId: opts.defaultAgentId,
     mainKey,
     scope,
@@ -76,11 +85,12 @@ export function resolveCronJobSessionBindings(
   if (!agentId) {
     return bindings;
   }
-  const add = (sessionKey: string | undefined) => {
+  const add = (sessionKey: string | undefined, bindingAgentId = agentId) => {
     const trimmed = sessionKey?.trim();
     if (!trimmed) {
       return;
     }
+    const normalizedBindingAgentId = normalizeAgentId(bindingAgentId);
     // Literal global names the selected agent's physical row; a qualified
     // named target remains distinct. Queue-key qualification has other owners.
     const key =
@@ -88,11 +98,11 @@ export function resolveCronJobSessionBindings(
         ? trimmed
         : resolveCronAgentSessionKey({
             sessionKey: trimmed,
-            agentId,
+            agentId: normalizedBindingAgentId,
             mainKey,
             cfg: opts.cfg,
           });
-    bindings.set(key, parseAgentSessionKey(key)?.agentId ?? agentId);
+    bindings.set(key, parseAgentSessionKey(key)?.agentId ?? normalizedBindingAgentId);
   };
   try {
     if (job.sessionTarget === "main") {
@@ -108,6 +118,7 @@ export function resolveCronJobSessionBindings(
     }
     add(job.sessionKey);
     add(job.sourceConversation?.sessionKey);
+    add(ownerSessionKey, ownerAgentId?.trim() || agentId);
   } catch {
     // Malformed persisted targets are quarantined by the store loader; a job
     // that slips through must not break session listing, so bind nothing.
