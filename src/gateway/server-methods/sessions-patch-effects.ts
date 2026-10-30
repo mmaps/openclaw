@@ -74,17 +74,22 @@ export async function publishSessionPatchEffects(params: {
   if (params.callerCanManageCron && archivedSessionKeys.size > 0) {
     const timing = params.diagnostics?.scope("cronEffects");
     try {
-      const disabledBySession = await disableCronJobsBoundToSessions({
+      const cleanup = await disableCronJobsBoundToSessions({
         cron: params.context.cron,
         cfg: params.cfg,
         sessionKeys: [...archivedSessionKeys],
       });
-      for (const [sessionKey, disabledJobIds] of disabledBySession) {
+      for (const [sessionKey, disabledJobIds] of cleanup.disabledBySession) {
         if (disabledJobIds.length > 0) {
           sessionLog.info(
             `sessions.patch: disabled cron jobs bound to archived session ${sessionKey}: ${disabledJobIds.join(", ")}`,
           );
         }
+      }
+      if (cleanup.failures.length > 0) {
+        sessionLog.warn(
+          `sessions.patch: failed to disable ${cleanup.failures.length} cron job(s) for archived sessions: ${cleanup.failures.map(({ jobId, message }) => `${jobId ?? "unknown"}: ${message}`).join("; ")}`,
+        );
       }
     } catch (error) {
       sessionLog.warn(

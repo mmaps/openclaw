@@ -1,5 +1,6 @@
 /** Maps cron jobs to the physical conversations they are bound to. */
 import type { OpenClawConfig } from "../config/types.openclaw.js";
+import { formatErrorMessage } from "../infra/errors.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import { tryResolveCronJobEffectiveAgentId } from "./agent-id.js";
 import { resolveCronAgentSessionKey } from "./isolated-agent/session-key.js";
@@ -122,20 +123,31 @@ class CronJobBindingStaleError extends Error {
   }
 }
 
+export type DisableCronJobsBoundToSessionsResult = {
+  disabledBySession: Map<string, string[]>;
+  failures: Array<{ jobId?: string; message: string }>;
+};
+
 /** Disables enabled jobs bound to any specified session with one job-list scan. */
 export async function disableCronJobsBoundToSessions(params: {
   cron: Pick<CronServiceContract, "list" | "updateWithPrecondition" | "getDefaultAgentId">;
   cfg: OpenClawConfig;
   sessionKeys: readonly string[];
-}): Promise<Map<string, string[]>> {
+}): Promise<DisableCronJobsBoundToSessionsResult> {
   const sessionKeys = [...new Set(params.sessionKeys.map((key) => key.trim()).filter(Boolean))];
   const disabledBySession = new Map(sessionKeys.map((sessionKey) => [sessionKey, [] as string[]]));
   if (sessionKeys.length === 0) {
-    return disabledBySession;
+    return { disabledBySession, failures: [] };
   }
   const targetKeys = new Set(sessionKeys);
-  const jobs = await params.cron.list();
-  const defaultAgentId = params.cron.getDefaultAgentId();
+  let jobs: CronJob[];
+  let defaultAgentId: string | undefined;
+  try {
+    jobs = await params.cron.list();
+    defaultAgentId = params.cron.getDefaultAgentId();
+  } catch (error) {
+    return { disabledBySession, failures: [{ message: formatErrorMessage(error) }] };
+  }
   const matchingSessionKeys = (job: CronJobSessionBinding & Pick<CronJob, "enabled">) => {
     if (!job.enabled) {
       return [];
@@ -146,7 +158,7 @@ export async function disableCronJobsBoundToSessions(params: {
     });
     return [...boundKeys.keys()].filter((sessionKey) => targetKeys.has(sessionKey));
   };
-  const failures: unknown[] = [];
+  const failures: DisableCronJobsBoundToSessionsResult["failures"] = [];
   for (const job of jobs) {
     if (matchingSessionKeys(job).length === 0) {
       continue;
@@ -169,18 +181,8 @@ export async function disableCronJobsBoundToSessions(params: {
       if (error instanceof CronJobBindingStaleError) {
         continue;
       }
-      failures.push(error);
+      failures.push({ jobId: job.id, message: formatErrorMessage(error) });
     }
   }
-  if (failures.length > 0) {
-    const subject =
-      sessionKeys.length === 1
-        ? `bound to ${sessionKeys[0]}`
-        : `bound to ${sessionKeys.length} sessions`;
-    throw new AggregateError(
-      failures,
-      `failed to disable ${failures.length} cron job(s) ${subject}`,
-    );
-  }
-  return disabledBySession;
+  return { disabledBySession, failures };
 }

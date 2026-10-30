@@ -217,16 +217,18 @@ test("sessions.delete rejects main and aborts active runs", async () => {
   expect(unbind).toHaveBeenCalledExactlyOnceWith({ targetSessionKey: key, reason });
 });
 
-test("sessions.delete disables bound automations only for admin-authorized deletion", async () => {
-  const key = "agent:main:deleted-context";
+test("sessions.delete reports bound automation cleanup for both authorized deletion paths", async () => {
+  const archivedKey = "agent:main:archived-context";
+  const adminKey = "agent:main:admin-context";
   const unrelatedKey = "agent:main:other";
   await seedSessions(
-    [key, "sess-deleted-context"],
-    [unrelatedKey, "sess-other", { archivedAt: Date.now() }],
+    [archivedKey, "sess-archived", { archivedAt: Date.now() }],
+    [adminKey, "sess-admin"],
+    [unrelatedKey, "sess-other"],
   );
-  const job: CronStoredJob = {
-    id: "created-here",
-    name: "Created here",
+  const job = (id: string, sessionKey: string, sessionId: string): CronStoredJob => ({
+    id,
+    name: id,
     enabled: true,
     createdAtMs: 1,
     updatedAtMs: 1,
@@ -234,16 +236,15 @@ test("sessions.delete disables bound automations only for admin-authorized delet
     sessionTarget: "isolated",
     wakeMode: "now",
     payload: { kind: "agentTurn", message: "Synthetic reminder" },
-    sourceConversation: { sessionKey: key, sessionId: "sess-deleted-context" },
+    sourceConversation: { sessionKey, sessionId },
     state: {},
-  };
-  const unrelatedJob: CronStoredJob = {
-    ...job,
-    id: "unrelated",
-    name: "Unrelated",
-    sourceConversation: { sessionKey: unrelatedKey, sessionId: "sess-other" },
-  };
-  const jobs = [job, unrelatedJob];
+  });
+  const jobs = [
+    job("archived-bound", archivedKey, "sess-archived"),
+    job("admin-bound", adminKey, "sess-admin"),
+    job("fails", adminKey, "sess-admin"),
+    job("unrelated", unrelatedKey, "sess-other"),
+  ];
   const updateWithPrecondition = vi.fn(
     async (
       id: string,
@@ -254,16 +255,14 @@ test("sessions.delete disables bound automations only for admin-authorized delet
       if (!currentJob) {
         throw new Error(`cron job not found: ${id}`);
       }
+      if (id === "fails") {
+        throw new Error("synthetic disable failure");
+      }
       await precondition(currentJob, Date.now());
       currentJob.enabled = patch.enabled ?? currentJob.enabled;
       return currentJob;
     },
   );
-  expect(jobs.map(({ id, enabled }) => ({ id, enabled }))).toEqual([
-    { id: "created-here", enabled: true },
-    { id: "unrelated", enabled: true },
-  ]);
-
   const context = {
     cron: {
       getDefaultAgentId: () => "main",
@@ -273,20 +272,36 @@ test("sessions.delete disables bound automations only for admin-authorized delet
   };
   const writeScopedClient = { connect: { scopes: ["operator.write"] } } as never;
   const archivedDeleted = await deleteSession(
-    { key: unrelatedKey, archivedOnly: true },
+    { key: archivedKey, archivedOnly: true },
     { context, client: writeScopedClient },
   );
-  expect(archivedDeleted).toMatchObject({ ok: true, payload: { deleted: true } });
-  expect(unrelatedJob.enabled).toBe(true);
+  expect(archivedDeleted).toMatchObject({
+    ok: true,
+    payload: {
+      deleted: true,
+      automationCleanup: { disabledJobIds: ["archived-bound"], failures: [] },
+    },
+  });
 
   const deleted = await deleteSession(
-    { key },
+    { key: adminKey },
     { context, client: { connect: { scopes: ["operator.admin"] } } as never },
   );
 
-  expect(deleted).toMatchObject({ ok: true, payload: { deleted: true } });
+  expect(deleted).toMatchObject({
+    ok: true,
+    payload: {
+      deleted: true,
+      automationCleanup: {
+        disabledJobIds: ["admin-bound"],
+        failures: [{ jobId: "fails", message: "synthetic disable failure" }],
+      },
+    },
+  });
   expect(jobs.map(({ id, enabled }) => ({ id, enabled }))).toEqual([
-    { id: "created-here", enabled: false },
+    { id: "archived-bound", enabled: false },
+    { id: "admin-bound", enabled: false },
+    { id: "fails", enabled: true },
     { id: "unrelated", enabled: true },
   ]);
 });

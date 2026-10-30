@@ -123,7 +123,7 @@ async function disable(
   defaultAgentId: string | null = "main",
 ) {
   const sessionKey = "agent:main:cron:bound";
-  const disabled = await disableCronJobsBoundToSessions({
+  const result = await disableCronJobsBoundToSessions({
     cron: {
       list: async () => jobs,
       updateWithPrecondition,
@@ -132,7 +132,7 @@ async function disable(
     cfg: {},
     sessionKeys: [sessionKey],
   });
-  return disabled.get(sessionKey) ?? [];
+  return { disabled: result.disabledBySession.get(sessionKey) ?? [], failures: result.failures };
 }
 
 test("disables only enabled jobs bound to the archived session", async () => {
@@ -146,14 +146,17 @@ test("disables only enabled jobs bound to the archived session", async () => {
     job({ id: "already-off", enabled: false, sessionKey: "cron:bound" }),
   ];
   const update = fakeUpdateWithPrecondition(() => jobs);
-  expect(await disable(jobs, update)).toEqual(["bound", "created-here"]);
+  expect(await disable(jobs, update)).toEqual({
+    disabled: ["bound", "created-here"],
+    failures: [],
+  });
   expect(update.mock.calls[0]?.slice(0, 2)).toEqual(["bound", { enabled: false }]);
 });
 
 test("leaves ownerless jobs unchanged when no canonical default is configured", async () => {
   const jobs = [job({ id: "bound" })];
   const update = fakeUpdateWithPrecondition(() => jobs);
-  expect(await disable(jobs, update, null)).toEqual([]);
+  expect(await disable(jobs, update, null)).toEqual({ disabled: [], failures: [] });
   expect(update).not.toHaveBeenCalled();
 });
 
@@ -162,14 +165,17 @@ test("skips jobs retargeted between the list snapshot and the locked update", as
   const update = fakeUpdateWithPrecondition(() => [
     job({ id: "bound", sessionTarget: "session:agent:main:elsewhere" }),
   ]);
-  expect(await disable(listed, update)).toEqual([]);
+  expect(await disable(listed, update)).toEqual({ disabled: [], failures: [] });
   expect(update).toHaveBeenCalledTimes(1);
 });
 
 test("a failing job does not abort the remaining bound jobs", async () => {
   const listed = [job({ id: "vanished", sessionKey: "cron:bound" }), job({ id: "bound" })];
   const update = fakeUpdateWithPrecondition(() => [job({ id: "bound" })]);
-  await expect(disable(listed, update)).rejects.toThrow(AggregateError);
+  expect(await disable(listed, update)).toEqual({
+    disabled: ["bound"],
+    failures: [{ jobId: "vanished", message: "cron job not found: vanished" }],
+  });
   expect(update.mock.calls.map((call) => call[0])).toEqual(["vanished", "bound"]);
 });
 

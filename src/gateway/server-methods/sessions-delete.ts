@@ -5,6 +5,7 @@ import {
   errorShape,
   type ErrorShape,
   type PreservedSessionWorktree,
+  type SessionAutomationCleanup,
   type SessionsDeleteParams,
   type SessionsDeleteResult,
   validateSessionsDeleteParams,
@@ -41,7 +42,6 @@ import {
 } from "../../sessions/session-controller.lifecycle.js";
 import { handleSessionStateSessionDeleted } from "../../sessions/session-state-events.js";
 import { removeSessionWorktree } from "../../sessions/session-worktree-lifecycle.js";
-import { hasGatewayAdminScope } from "../operator-scopes.js";
 import { resolvePluginSessionOwnershipError } from "../session-plugin-ownership.js";
 import { resolveRequestedSessionAgentId as resolveRequestedGlobalAgentId } from "../session-request-agent.js";
 import { invalidSessionRequest } from "../session-request-error.js";
@@ -338,6 +338,7 @@ async function deleteGatewaySessionInScope(
     ];
     let drain: SessionLifecycleDrain | undefined;
     let worktreePreserved: PreservedSessionWorktree | undefined;
+    let automationCleanup: SessionAutomationCleanup | undefined;
     let published = false;
     const publishDeletion = (deletion: Awaited<ReturnType<typeof deleteSessionEntryLifecycle>>) => {
       const response: SessionsDeleteResult = {
@@ -346,6 +347,7 @@ async function deleteGatewaySessionInScope(
         deleted: deletion.deleted,
         archived: deletion.archivedTranscripts.map((entry) => entry.archivedPath),
         ...(worktreePreserved ? { worktreePreserved } : {}),
+        ...(automationCleanup ? { automationCleanup } : {}),
       };
       if (published) {
         return response;
@@ -540,6 +542,30 @@ async function deleteGatewaySessionInScope(
               // this fence opens, so a same-key successor cannot be mistaken for it.
               const deletedSessionKey = target.canonicalKey ?? key;
               await handleSessionStateSessionDeleted(deletedSessionKey, requestedAgentId);
+              try {
+                const cleanup = await disableCronJobsBoundToSessions({
+                  cron: context.cron,
+                  cfg,
+                  sessionKeys: [deletedSessionKey],
+                });
+                const disabledJobIds = cleanup.disabledBySession.get(deletedSessionKey) ?? [];
+                automationCleanup = { disabledJobIds, failures: cleanup.failures };
+                if (disabledJobIds.length > 0) {
+                  sessionLog.info(
+                    `sessions.delete: disabled cron jobs bound to deleted session ${deletedSessionKey}: ${disabledJobIds.join(", ")}`,
+                  );
+                }
+              } catch (error) {
+                automationCleanup = {
+                  disabledJobIds: [],
+                  failures: [{ message: formatErrorMessage(error) }],
+                };
+              }
+              if (automationCleanup.failures.length > 0) {
+                sessionLog.warn(
+                  `sessions.delete: failed to disable ${automationCleanup.failures.length} cron job(s) for deleted session ${deletedSessionKey}: ${automationCleanup.failures.map(({ jobId, message }) => `${jobId ?? "unknown"}: ${message}`).join("; ")}`,
+                );
+              }
               // The absent session plus its retained registry binding survive a crash.
               // Keep this mutation and request lifetime through lossless cleanup, but
               // acknowledge archived cleanup once the visible deletion is committed.
@@ -579,26 +605,6 @@ async function deleteGatewaySessionInScope(
         throw error;
       }
       return { ok: false, error: error.error };
-    }
-    if (deletion.deleted && hasGatewayAdminScope(client)) {
-      try {
-        const disabledJobIds = (
-          await disableCronJobsBoundToSessions({
-            cron: context.cron,
-            cfg,
-            sessionKeys: [target.canonicalKey],
-          })
-        ).get(target.canonicalKey);
-        if (disabledJobIds?.length) {
-          sessionLog.info(
-            `sessions.delete: disabled cron jobs bound to deleted session ${target.canonicalKey}: ${disabledJobIds.join(", ")}`,
-          );
-        }
-      } catch (error) {
-        sessionLog.warn(
-          `sessions.delete: failed to disable cron jobs for deleted session ${target.canonicalKey}: ${formatErrorMessage(error)}`,
-        );
-      }
     }
     const response = publishDeletion(deletion);
     return { ok: true, result: response };
