@@ -217,9 +217,13 @@ test("sessions.delete rejects main and aborts active runs", async () => {
   expect(unbind).toHaveBeenCalledExactlyOnceWith({ targetSessionKey: key, reason });
 });
 
-test("sessions.delete disables automations bound to the deleted conversation", async () => {
+test("sessions.delete disables bound automations only for admin-authorized deletion", async () => {
   const key = "agent:main:deleted-context";
-  await seedSession(key, "sess-deleted-context");
+  const unrelatedKey = "agent:main:other";
+  await seedSessions(
+    [key, "sess-deleted-context"],
+    [unrelatedKey, "sess-other", { archivedAt: Date.now() }],
+  );
   const job: CronStoredJob = {
     id: "created-here",
     name: "Created here",
@@ -233,33 +237,58 @@ test("sessions.delete disables automations bound to the deleted conversation", a
     sourceConversation: { sessionKey: key, sessionId: "sess-deleted-context" },
     state: {},
   };
+  const unrelatedJob: CronStoredJob = {
+    ...job,
+    id: "unrelated",
+    name: "Unrelated",
+    sourceConversation: { sessionKey: unrelatedKey, sessionId: "sess-other" },
+  };
+  const jobs = [job, unrelatedJob];
   const updateWithPrecondition = vi.fn(
     async (
-      _id: string,
+      id: string,
       patch: { enabled?: boolean },
       precondition: (currentJob: CronJob, nowMs: number) => void | Promise<void>,
     ) => {
-      await precondition(job, Date.now());
-      job.enabled = patch.enabled ?? job.enabled;
-      return job;
+      const currentJob = jobs.find((candidate) => candidate.id === id);
+      if (!currentJob) {
+        throw new Error(`cron job not found: ${id}`);
+      }
+      await precondition(currentJob, Date.now());
+      currentJob.enabled = patch.enabled ?? currentJob.enabled;
+      return currentJob;
     },
   );
+  expect(jobs.map(({ id, enabled }) => ({ id, enabled }))).toEqual([
+    { id: "created-here", enabled: true },
+    { id: "unrelated", enabled: true },
+  ]);
+
+  const context = {
+    cron: {
+      getDefaultAgentId: () => "main",
+      list: async () => jobs,
+      updateWithPrecondition,
+    },
+  };
+  const writeScopedClient = { connect: { scopes: ["operator.write"] } } as never;
+  const archivedDeleted = await deleteSession(
+    { key: unrelatedKey, archivedOnly: true },
+    { context, client: writeScopedClient },
+  );
+  expect(archivedDeleted).toMatchObject({ ok: true, payload: { deleted: true } });
+  expect(unrelatedJob.enabled).toBe(true);
 
   const deleted = await deleteSession(
     { key },
-    {
-      context: {
-        cron: {
-          getDefaultAgentId: () => "main",
-          list: async () => [job],
-          updateWithPrecondition,
-        },
-      },
-    },
+    { context, client: { connect: { scopes: ["operator.admin"] } } as never },
   );
 
   expect(deleted).toMatchObject({ ok: true, payload: { deleted: true } });
-  expect(job.enabled).toBe(false);
+  expect(jobs.map(({ id, enabled }) => ({ id, enabled }))).toEqual([
+    { id: "created-here", enabled: false },
+    { id: "unrelated", enabled: true },
+  ]);
 });
 
 test("sessions.delete preserves locked archived sessions and deletes ordinary archived sessions", async () => {
