@@ -87,6 +87,8 @@ describe("check-deadcode-exports", () => {
       "scripts/generate-runtime-script-assets.mjs!",
       "scripts/generate-static-validators.mts!",
       "scripts/perf/cron-delivery-gateway-entry.ts!",
+      "scripts/perf/doctor-retirement-measure.mts!",
+      "scripts/perf/github-readiness-state-bench.ts!",
       "scripts/perf/plugin-policy-read-measure.mjs!",
       "scripts/perf/prompt-cache-observation-measure.ts!",
       "scripts/perf/reconnect-read-wave-measure.ts!",
@@ -566,6 +568,107 @@ const unrelatedArgs = [
     );
     expect(withoutControlMember).not.toContain("clearSharedCodexAppServerClientAndWait as");
     expect(withoutControlMember).toContain("runtimeProcessDeployManifest");
+  });
+
+  it("models TTS method selectors only through their supplying lazy runtime binder", () => {
+    const consumerPath = path.resolve("src/plugins/runtime/index.ts");
+    const source = fs.readFileSync(consumerPath, "utf8");
+    const compile = createDynamicConsumerCompiler();
+    const project = (consumer = source) =>
+      compile(new Map([[consumerPath, consumer]]))
+        .split("\n")
+        .filter((line) => line.endsWith('from "../src/tts/tts.js";'))
+        .join("\n");
+    const members = [
+      "buildTtsSystemPromptHintAsync",
+      "textToSpeechStream",
+      "textToSpeechTelephony",
+    ];
+    const compiled = project();
+    for (const member of members) {
+      expect(compiled).toContain(`${member} as`);
+      const selector = `bindTtsRuntime((runtime) => runtime.${member})`;
+      const renamed = selector.replaceAll("runtime", "speech");
+      expect(project(replaceFixture(source, selector, renamed))).toContain(`${member} as`);
+      expect(project(replaceFixture(source, selector, "otherMethod"))).not.toContain(
+        `${member} as`,
+      );
+    }
+    for (const [from, to] of [
+      ['import("../../tts/tts.js")', 'import("./other.js")'],
+      [
+        "createLazyRuntimeMethodBinder(loadTtsRuntime)",
+        "createLazyRuntimeMethodBinder(loadTtsRequestRuntime)",
+      ],
+      ["const bindTtsRuntime =", "// const bindTtsRuntime ="],
+    ] as const) {
+      expect(project(replaceFixture(source, from, to))).toBe("");
+    }
+    expect(compiled).not.toContain("prepareTtsRequest as");
+  });
+
+  it("models optional anchor imports only through their bound runtime calls", () => {
+    const consumerPath = path.resolve("src/process/supervisor/service-child-group-anchor.ts");
+    const source = fs.readFileSync(consumerPath, "utf8");
+    const compile = createDynamicConsumerCompiler();
+    const members = ["recordNodeWorkerDescendantsReaped", "recordNodeWorkerLineageSettled"];
+    const specifier = "../../node-host/node-worker-lineage-completion.js";
+    const load = `await import("${specifier}").catch(() => undefined)`;
+    const call = (member: string) => `lineageCompletion.${member}(start.cleanupBinding)`;
+    const project = (consumer = source) => {
+      const compiled = compile(new Map([[consumerPath, consumer]]));
+      expect(compiled).toContain("runtimeProcessDeployManifest");
+      return compiled
+        .split("\n")
+        .filter((line) =>
+          line.endsWith('from "../src/node-host/node-worker-lineage-completion.js";'),
+        )
+        .join("\n");
+    };
+
+    for (const member of members) {
+      expect(project()).toContain(`${member} as`);
+      expect(project(source.replaceAll("lineageCompletion", "completion"))).toContain(
+        `${member} as`,
+      );
+      const withoutCall = project(replaceFixture(source, call(member), "false"));
+      expect(withoutCall).not.toContain(`${member} as`);
+      expect(withoutCall).toContain(`${members.find((other) => other !== member)} as`);
+      const retargetedCall = project(replaceFixture(source, call(member), call("otherCompletion")));
+      expect(retargetedCall).not.toContain(`${member} as`);
+      expect(retargetedCall).toContain("otherCompletion as");
+    }
+    for (const replacement of ["undefined", 'await import("./other.js").catch(() => undefined)']) {
+      expect(project(replaceFixture(source, load, replacement))).toBe("");
+    }
+
+    const decoy = `lineageCompletion = owned ? ${load} : undefined;
+${members.map(call).join(";\n")};`;
+    const withoutImport = replaceFixture(source, load, "undefined");
+    expect(
+      project(`${withoutImport}\n/* ${decoy} */\nconst text = ${JSON.stringify(decoy)};`),
+    ).toBe("");
+    expect(
+      project(`import type * as lineageWriter from "${specifier}";
+let lineageCompletion: typeof lineageWriter | undefined;
+/* ${decoy} */
+const text = ${JSON.stringify(decoy)};`),
+    ).toBe("");
+
+    const withoutCalls = members.reduce(
+      (consumer, member) => replaceFixture(consumer, call(member), "false"),
+      source,
+    );
+    const callDecoys = members.map(call).join(";\n");
+    expect(
+      project(`${withoutCalls}\n/* ${callDecoys} */\nconst text = ${JSON.stringify(callDecoys)};`),
+    ).toBe("");
+    expect(
+      project(`${withoutCalls}
+function other(lineageCompletion: typeof lineageWriter) {
+  ${callDecoys};
+}`),
+    ).toBe("");
   });
 
   it("models a computed checkout module member only while its binding and call exist", () => {

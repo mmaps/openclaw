@@ -36,24 +36,37 @@ const repositoryScriptEntries = [
   // Their source headers document standalone benchmark and measurement commands.
   "scripts/bench-android-release-history.mts!",
   "scripts/bench-duplicate-paragraphs.mts!",
+  "scripts/perf/agent-exec-cgroup-proof.ts!",
+  "scripts/perf/agent-startup-inspection.ts!",
   "scripts/perf/anthropic-request-construction.ts!",
   "scripts/perf/auth-file-watch-events-measure.ts!",
+  "scripts/perf/backup-verify-fixture.mjs!",
+  "scripts/perf/backup-verify-measure.mjs!",
+  "scripts/perf/board-read-admission-measure.ts!",
   "scripts/perf/catalog-worker-churn-measure.mjs!",
   "scripts/perf/code-mode-control-schema-measure.ts!",
   "scripts/perf/code-mode-result-load-measure.ts!",
   "scripts/perf/completion-payload-bytes-measure.ts!",
   "scripts/perf/connect-profile-binding-measure.ts!",
+  "scripts/perf/control-ui-forbidden-catalog-measure.ts!",
   "scripts/perf/cron-reader-reuse-measure.ts!",
   "scripts/perf/cron-registry-read-measure.ts!",
+  "scripts/perf/doctor-retirement-measure.mts!",
   "scripts/perf/doctor-session-manifests.ts!",
+  "scripts/perf/doctor-sqlite-inspection.mjs!",
+  "scripts/perf/github-readiness-state-bench.ts!",
+  "scripts/perf/github-publication-read-measure.ts!",
   "scripts/perf/history-model-projection-measure.ts!",
   "scripts/perf/inspection-read-admission.ts!",
+  "scripts/perf/keyed-user-replay-measure.ts!",
   "scripts/perf/local-workspace-refresh-measure.ts!",
   "scripts/perf/local-workspace-request-bytes-measure.ts!",
+  "scripts/perf/node-host-stats-measure.ts!",
   "scripts/perf/node-worker-churn-measure.mjs!",
   "scripts/perf/placement-retirement-replies.mjs!",
   "scripts/perf/plugin-state-authority-receipts.ts!",
   "scripts/perf/plugin-state-claims-measure.ts!",
+  "scripts/perf/prometheus-cardinality-measure.ts!",
   "scripts/perf/reef-state-request-bytes.ts!",
   "scripts/perf/schema-crossing-measure.ts!",
   "scripts/perf/session-append-reload-measure.ts!",
@@ -62,11 +75,15 @@ const repositoryScriptEntries = [
   "scripts/perf/session-message-custody-payload-measure.mjs!",
   "scripts/perf/session-patch-response-measure.ts!",
   "scripts/perf/sessions-files-title-measure.ts!",
+  "scripts/perf/sessions-usage-measure.ts!",
   "scripts/perf/tool-loop-outcome-measure.ts!",
   "scripts/perf/tool-search-snapshot-measure.ts!",
   "scripts/perf/trajectory-record-event-measure.ts!",
+  "scripts/perf/transcript-anchor-page-measure.ts!",
   "scripts/perf/transcript-json-array-measure.mjs!",
   "scripts/perf/transcript-pool-idle-measure.ts!",
+  "scripts/perf/transcript-turn-gateway.mts!",
+  "scripts/perf/update-state-io-measure.ts!",
   "scripts/perf/worktree-creation-measure.ts!",
   // The source header documents this matched Code Mode engine probe by path.
   "scripts/perf/code-mode-engine-measure.ts!",
@@ -147,6 +164,10 @@ const repositoryScriptEntries = [
   "apps/android/scripts/build-release-artifacts.ts!",
   // scripts/README.md invokes this warm-interaction benchmark CLI by path.
   "scripts/bench-control-ui-interactions.ts!",
+  // scripts/README.md invokes the real-Gateway Usage benchmark; it spawns this exact child path.
+  "scripts/bench-usage-gateway.ts!",
+  "scripts/lib/usage-bench-child.ts!",
+  "scripts/lib/usage-bench-observer.mjs!",
   // scripts/README.md invokes the Chromium/WebKit companion with shared scenarios.
   "scripts/bench-control-ui-engines.ts!",
   // The opt-in projection benchmark builds its browser fixture through this CLI.
@@ -171,6 +192,8 @@ const repositoryScriptEntries = [
   "scripts/control-ui-retention/retention-suite.ts!",
   // #179175 invokes this development-loop benchmark CLI by path.
   "scripts/bench-control-ui-dev-loop.mts!",
+  // The Control UI development guide invokes this watcher/dispatch diagnostic.
+  "scripts/bench-control-ui-hmr.mts!",
   // #179449 documents this document-handler benchmark CLI by path.
   "scripts/bench-control-ui-document.ts!",
   // The channel-turn benchmark guide invokes this opt-in CLI by path.
@@ -754,6 +777,7 @@ const repositoryScriptEntries = [
   "scripts/perf/session-entry-patch-payload.ts!",
   "scripts/perf/session-event-envelope-measure.ts!",
   "scripts/perf/session-transcript-path-measure.ts!",
+  "scripts/perf/skill-directory-modes-measure.ts!",
   "scripts/perf/skill-search-copies-measure.ts!",
   "scripts/perf/skill-snapshot-hydration-measure.ts!",
   "scripts/perf/skill-collision-diagnostics-measure.ts!",
@@ -1140,6 +1164,8 @@ const repositoryScriptEntries = [
   "scripts/pr-lib/review-artifacts.mjs!",
   // worktree.sh invokes this journal-state validator by path before native replay.
   "scripts/pr-lib/review-transition-state.mjs!",
+  // worktree.sh invokes explicit, supervised checkout-file salvage by path.
+  "scripts/pr-lib/review-transition-recovery.mjs!",
   "scripts/pr-lib/process-group-runner.mjs!",
   // worktree.sh launches the locked cold-worktree adapter by path.
   "scripts/pr-lib/worktree-provision.mts!",
@@ -1907,6 +1933,8 @@ const config = {
       ],
       // Platform tools, installed CLIs, and shell builtins used by scripts and boundary tests.
       ignoreBinaries: [
+        // doctor-sqlite-inspection.mjs compiles its native read counter with the host compiler.
+        "cc",
         "ffmpeg",
         "lsattr",
         "mint",

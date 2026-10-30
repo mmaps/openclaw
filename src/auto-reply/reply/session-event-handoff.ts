@@ -4,6 +4,10 @@ import { resolveConfiguredAgentId } from "../../agents/agent-scope-config.js";
 import { resolveAgentRunErrorLifecycleFields } from "../../agents/run-termination.js";
 import { getRuntimeConfigSnapshotMetadata } from "../../config/runtime-snapshot.js";
 import type { SessionEntryCreationOperation } from "../../config/sessions/session-accessor.sqlite-entry-cache.types.js";
+import {
+  composeSessionSourceAssertion,
+  createDynamicSessionSourceAssertion,
+} from "../../config/sessions/session-source-authority.js";
 import { SessionWorkStartError } from "../../config/sessions/session-work-start.js";
 import { runWithoutOwnedSessionTranscriptWrites } from "../../config/sessions/transcript-write-context-store.js";
 import { resolveCronRunToolsAllow } from "../../cron/tools-allow.js";
@@ -130,6 +134,7 @@ function enqueueSessionEventAttempt(
   let operation: ReplyOperation | undefined;
   let inputRecorder: UserTurnTranscriptRecorder | undefined;
   let delivered = false;
+  let conversationResultCommitted: true | undefined;
   let deliveryAttempted = false;
   let deliveryAmbiguous = false;
   let deliveryError: string | undefined;
@@ -184,8 +189,30 @@ function enqueueSessionEventAttempt(
       generationLease?.assertCurrent();
     }
   };
-  const assertEffectCurrent = () => {
-    assertCurrent();
+  Object.assign(assertCurrent, {
+    prepareSessionSourceEffect: () =>
+      composeSessionSourceAssertion(
+        [
+          operatorAuthority?.assertCurrent,
+          accepted ? undefined : acceptanceAssertion,
+          options.assertCurrent,
+          options.expectedTarget?.assertCurrent,
+          options.scheduledAutomation?.assertCurrent,
+          createDynamicSessionSourceAssertion(
+            () => generationLease?.assertCurrent,
+            () => {
+              throw new Error("Session event destination authority changed");
+            },
+          ),
+        ],
+        (assertSources) => {
+          assertSources();
+          assertCurrent();
+        },
+      ).prepareSessionSourceEffect(),
+  });
+  const assertEffectCurrent = composeSessionSourceAssertion([assertCurrent], (assertSource) => {
+    assertSource();
     if (
       getSessionEventRuntimeConfig() !== cfg ||
       getRuntimeConfigSnapshotMetadata() !== configPublication
@@ -195,7 +222,7 @@ function enqueueSessionEventAttempt(
       configPublicationChanged = true;
       throw new Error("Session event configuration changed; retry under the current policy");
     }
-  };
+  });
   const accept = () => {
     if (accepted || settlement === "finished") {
       return;
@@ -359,6 +386,7 @@ function enqueueSessionEventAttempt(
           resolveAgentRunErrorLifecycleFields(failure, operation?.abortSignal ?? signal)
             .stopReason === "restart",
         delivered,
+        conversationResultCommitted,
         deliveryAttempted,
         deliveryAmbiguous,
         deliveryError,
@@ -395,7 +423,11 @@ function enqueueSessionEventAttempt(
     if (kind === "final" && payload.text) {
       summary ??= truncateUtf16Safe(payload.text, 2000);
     }
-    if (options.deliver === false || target?.deliver === false) {
+    if (
+      options.deliver === false ||
+      target?.deliver === false ||
+      (options.suppressErrorDelivery && payload.isError === true)
+    ) {
       return;
     }
     if (kind === "final" && sourceDeliveryOutcome?.satisfiesSourceDelivery) {
@@ -593,6 +625,7 @@ function enqueueSessionEventAttempt(
               nextCheckMs = terminal.nextCheckMs;
               sourceDeliveryOutcome = terminal.sourceDeliveryOutcome;
               automationResult = terminal.automationResult;
+              conversationResultCommitted = terminal.conversationResultCommitted;
               delivered ||= sourceDeliveryOutcome?.satisfiesSourceDelivery === true;
             },
           },
